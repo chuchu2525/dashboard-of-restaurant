@@ -1,0 +1,5 @@
+{
+  "name": "Restaurant Occupancy Dashboard",
+  "description": "A dashboard to visualize restaurant occupancy data from JSON files, helping to optimize staffing and seating arrangements.",
+  "requestFramePermissions": []
+}
