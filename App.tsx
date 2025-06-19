@@ -1,127 +1,66 @@
-
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import { FileUpload } from './components/FileUpload';
 import { Dashboard } from './components/Dashboard';
-import { RestaurantData, ProcessedFrame, SummaryMetrics, PersonDetection, SeatOccupancyDataPoint } from './types';
+import { RestaurantData, ProcessedFrame, SummaryMetrics } from './types';
 
 const App: React.FC = () => {
-  const [restaurantData, setRestaurantData] = useState<RestaurantData | null>(null);
   const [processedFrames, setProcessedFrames] = useState<ProcessedFrame[]>([]);
   const [summaryMetrics, setSummaryMetrics] = useState<SummaryMetrics | null>(null);
   const [fileName, setFileName] = useState<string>('');
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(false);
+  const [hasData, setHasData] = useState<boolean>(false);
 
-  const processData = useCallback((data: RestaurantData) => {
+
+  const handleFileUpload = useCallback((jsonString: string, name: string) => {
     setIsLoading(true);
     setError(null);
-    try {
-      const framesArray: ProcessedFrame[] = Object.entries(data)
-        .map(([frameKey, detections]) => {
-          if (!detections || detections.length === 0) {
-            return null; // Skip empty frames
-          }
-          const firstDetection = detections[0];
-          const time = new Date(firstDetection.Time).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
-          
-          const seatCounts: Record<string, number> = {};
-          detections.forEach(det => {
-            seatCounts[det.SeatID] = (seatCounts[det.SeatID] || 0) + 1;
-          });
-          
-          const seatOccupancy: SeatOccupancyDataPoint[] = Object.entries(seatCounts).map(([seatId, persons]) => ({
-            seatId,
-            persons
-          }));
-
-          const groupSizesAtTables: number[] = Object.values(seatCounts).filter(count => count > 0);
-
-          return {
-            frameId: frameKey,
-            detections,
-            time,
-            fullTimestamp: firstDetection.Time,
-            totalPersons: firstDetection.TotalPerson,
-            seatOccupancy,
-            groupSizesAtTables,
-          };
-        })
-        .filter((frame): frame is ProcessedFrame => frame !== null) // Type guard and filter out nulls
-        .sort((a, b) => new Date(a.fullTimestamp).getTime() - new Date(b.fullTimestamp).getTime()); // Sort by time
-
-      if (framesArray.length === 0) {
-        setError("No valid data found in the file after processing.");
-        setRestaurantData(null);
-        setProcessedFrames([]);
-        setSummaryMetrics(null);
-        setIsLoading(false);
-        return;
-      }
-      
-      setProcessedFrames(framesArray);
-
-      // Calculate Summary Metrics
-      const latestFrame = framesArray[framesArray.length - 1];
-      const currentTotalCustomers = latestFrame.totalPersons;
-      const currentOccupiedTables = latestFrame.seatOccupancy.filter(s => s.persons > 0).length;
-
-      let peakOccupancyCount = 0;
-      let peakOccupancyTime = '';
-      framesArray.forEach(frame => {
-        if (frame.totalPersons > peakOccupancyCount) {
-          peakOccupancyCount = frame.totalPersons;
-          peakOccupancyTime = `${frame.time} on ${new Date(frame.fullTimestamp).toLocaleDateString()}`;
-        }
-      });
-      
-      const allGroupSizes: number[] = [];
-      framesArray.forEach(frame => {
-        allGroupSizes.push(...frame.groupSizesAtTables);
-      });
-      const averageGroupSizeOverall = allGroupSizes.length > 0 
-        ? allGroupSizes.reduce((sum, size) => sum + size, 0) / allGroupSizes.length 
-        : 0;
-
-      setSummaryMetrics({
-        currentTotalCustomers,
-        currentOccupiedTables,
-        averageGroupSizeOverall: parseFloat(averageGroupSizeOverall.toFixed(2)),
-        peakOccupancyTime,
-        peakOccupancyCount,
-      });
-      setRestaurantData(data); // Store original raw data if needed elsewhere
-      
-    } catch (e) {
-      console.error("Error processing data:", e);
-      setError("Failed to process the data. Ensure the JSON format is correct.");
-      setRestaurantData(null);
-      setProcessedFrames([]);
-      setSummaryMetrics(null);
-    } finally {
-      setIsLoading(false);
-    }
-  }, []);
-
-  const handleFileUpload = useCallback((data: RestaurantData, name: string) => {
     setFileName(name);
-    processData(data);
-  }, [processData]);
+
+    // Vite-specific worker instantiation
+    const worker = new Worker(new URL('./data.worker.ts', import.meta.url), {
+      type: 'module',
+    });
+
+    worker.onmessage = (e) => {
+      const { type, data, error: workerError } = e.data;
+      if (type === 'success') {
+        setProcessedFrames(data.processedFrames);
+        setSummaryMetrics(data.summaryMetrics);
+        setHasData(true);
+      } else {
+        console.error("Error from worker:", workerError);
+        setError(workerError || "Failed to process data in worker.");
+        setHasData(false);
+      }
+      setIsLoading(false);
+      worker.terminate();
+    };
+
+    worker.onerror = (e) => {
+      console.error("Worker error:", e);
+      setError("An unexpected error occurred in the data processing worker.");
+      setHasData(false);
+      setIsLoading(false);
+      worker.terminate();
+    };
+    
+    worker.postMessage(jsonString);
+  }, []);
 
   const handleFileError = useCallback((errMsg: string) => {
     setError(errMsg);
-    setRestaurantData(null);
-    setProcessedFrames([]);
-    setSummaryMetrics(null);
+    setHasData(false);
     setFileName('');
   }, []);
   
   const handleClearData = useCallback(() => {
-    setRestaurantData(null);
     setProcessedFrames([]);
     setSummaryMetrics(null);
     setFileName('');
     setError(null);
     setIsLoading(false);
+    setHasData(false);
   }, []);
 
   return (
@@ -132,7 +71,7 @@ const App: React.FC = () => {
       </header>
 
       <main>
-        {!restaurantData && !isLoading && (
+        {!hasData && !isLoading && (
           <div className="max-w-xl mx-auto bg-slate-800 shadow-2xl rounded-lg p-8">
             <FileUpload onFileUploadSuccess={handleFileUpload} onFileUploadError={handleFileError} />
           </div>
@@ -155,7 +94,7 @@ const App: React.FC = () => {
             </button>
           </div>
         )}
-        {restaurantData && !error && !isLoading && processedFrames.length > 0 && summaryMetrics && (
+        {hasData && !error && !isLoading && processedFrames.length > 0 && summaryMetrics && (
           <Dashboard 
             processedFrames={processedFrames} 
             summaryMetrics={summaryMetrics} 

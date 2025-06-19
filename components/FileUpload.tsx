@@ -1,9 +1,8 @@
-
 import React, { useCallback, useState } from 'react';
 import { RestaurantData } from '../types';
 
 interface FileUploadProps {
-  onFileUploadSuccess: (data: RestaurantData, fileName: string) => void;
+  onFileUploadSuccess: (jsonString: string, fileName: string) => void;
   onFileUploadError: (error: string) => void;
 }
 
@@ -28,20 +27,15 @@ export const FileUpload: React.FC<FileUploadProps> = ({ onFileUploadSuccess, onF
     reader.onload = (e) => {
       try {
         const text = e.target?.result as string;
-        const data = JSON.parse(text) as RestaurantData;
-        // Basic validation of data structure
-        if (typeof data !== 'object' || data === null || Object.keys(data).length === 0) {
-            throw new Error("JSON data is empty or not an object.");
+        if (!text) {
+          throw new Error("File is empty or could not be read.");
         }
-        // Further check if the first entry is an array of objects
-        const firstFrameKey = Object.keys(data)[0];
-        if (!Array.isArray(data[firstFrameKey]) || (data[firstFrameKey].length > 0 && typeof data[firstFrameKey][0] !== 'object')) {
-             throw new Error("JSON structure is not as expected. Should be { frameKey: [detections...] }.");
-        }
-        onFileUploadSuccess(data, file.name);
+        // Instead of parsing here, we pass the raw text to the parent.
+        // The parsing will be handled by the web worker.
+        onFileUploadSuccess(text, file.name);
       } catch (err) {
-        console.error("File parsing error:", err);
-        onFileUploadError(`Error parsing JSON file: ${err instanceof Error ? err.message : 'Unknown error'}`);
+        console.error("File reading error:", err);
+        onFileUploadError(`Error reading file: ${err instanceof Error ? err.message : 'Unknown error'}`);
       }
     };
     reader.onerror = () => {
