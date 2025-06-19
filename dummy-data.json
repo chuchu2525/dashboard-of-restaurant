@@ -1,0 +1,26 @@
+{
+  "frame_001": [
+    {"frame_number": 1, "timestamp": "2025-06-20 10:00:00", "person_id": "person_A", "bbox": [10, 10, 50, 50], "raw_seat_id": "left", "confirmed_seat_id": "left", "seat_status": "Assigned", "confidence": 0.95},
+    {"frame_number": 1, "timestamp": "2025-06-20 10:00:00", "person_id": "person_B", "bbox": [60, 10, 100, 50], "raw_seat_id": "left", "confirmed_seat_id": "left", "seat_status": "Assigned", "confidence": 0.94}
+  ],
+  "frame_002": [
+    {"frame_number": 2, "timestamp": "2025-06-20 10:00:30", "person_id": "person_A", "bbox": [10, 10, 50, 50], "raw_seat_id": "left", "confirmed_seat_id": "left", "seat_status": "Assigned", "confidence": 0.95},
+    {"frame_number": 2, "timestamp": "2025-06-20 10:00:30", "person_id": "person_B", "bbox": [60, 10, 100, 50], "raw_seat_id": "left", "confirmed_seat_id": "left", "seat_status": "Assigned", "confidence": 0.94}
+  ],
+  "frame_003": [
+    {"frame_number": 3, "timestamp": "2025-06-20 10:01:00", "person_id": "person_A", "bbox": [10, 10, 50, 50], "raw_seat_id": "left", "confirmed_seat_id": "left", "seat_status": "Assigned", "confidence": 0.95},
+    {"frame_number": 3, "timestamp": "2025-06-20 10:01:00", "person_id": "person_B", "bbox": [60, 10, 100, 50], "raw_seat_id": "left", "confirmed_seat_id": "left", "seat_status": "Assigned", "confidence": 0.94},
+    {"frame_number": 3, "timestamp": "2025-06-20 10:01:00", "person_id": "person_C", "bbox": [200, 10, 250, 50], "raw_seat_id": "right", "confirmed_seat_id": "right", "seat_status": "Assigned", "confidence": 0.98}
+  ],
+  "frame_004": [
+    {"frame_number": 4, "timestamp": "2025-06-20 10:01:30", "person_id": "person_A", "bbox": [10, 10, 50, 50], "raw_seat_id": "left", "confirmed_seat_id": "left", "seat_status": "Assigned", "confidence": 0.95},
+    {"frame_number": 4, "timestamp": "2025-06-20 10:01:30", "person_id": "person_B", "bbox": [60, 10, 100, 50], "raw_seat_id": "left", "confirmed_seat_id": "left", "seat_status": "Assigned", "confidence": 0.94},
+    {"frame_number": 4, "timestamp": "2025-06-20 10:01:30", "person_id": "person_C", "bbox": [200, 10, 250, 50], "raw_seat_id": "right", "confirmed_seat_id": "right", "seat_status": "Assigned", "confidence": 0.98}
+  ],
+  "frame_005": [
+    {"frame_number": 5, "timestamp": "2025-06-20 10:02:00", "person_id": "person_C", "bbox": [200, 10, 250, 50], "raw_seat_id": "right", "confirmed_seat_id": "right", "seat_status": "Assigned", "confidence": 0.98}
+  ],
+  "frame_006": [
+    {"frame_number": 6, "timestamp": "2025-06-20 10:02:30", "person_id": "person_C", "bbox": [200, 10, 250, 50], "raw_seat_id": "right", "confirmed_seat_id": "right", "seat_status": "Assigned", "confidence": 0.98}
+  ]
+} 

@@ -1,11 +1,14 @@
 import React, { useState, useCallback, useEffect } from 'react';
 import { FileUpload } from './components/FileUpload';
 import { Dashboard } from './components/Dashboard';
-import { RestaurantData, ProcessedFrame, SummaryMetrics } from './types';
+import { RestaurantData, ProcessedFrame, SummaryMetrics, ArrivalTrendDataPoint, AggregatedTimeSeries, SeatUsageBlock } from './types';
 
 const App: React.FC = () => {
   const [processedFrames, setProcessedFrames] = useState<ProcessedFrame[]>([]);
   const [summaryMetrics, setSummaryMetrics] = useState<SummaryMetrics | null>(null);
+  const [arrivalTrend, setArrivalTrend] = useState<ArrivalTrendDataPoint[]>([]);
+  const [aggregatedTimeSeries, setAggregatedTimeSeries] = useState<AggregatedTimeSeries | null>(null);
+  const [seatUsageTimeline, setSeatUsageTimeline] = useState<SeatUsageBlock[]>([]);
   const [fileName, setFileName] = useState<string>('');
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(false);
@@ -27,6 +30,9 @@ const App: React.FC = () => {
       if (type === 'success') {
         setProcessedFrames(data.processedFrames);
         setSummaryMetrics(data.summaryMetrics);
+        setArrivalTrend(data.arrivalTrendData);
+        setAggregatedTimeSeries(data.aggregatedTimeSeries);
+        setSeatUsageTimeline(data.seatUsageTimeline);
         setHasData(true);
       } else {
         console.error("Error from worker:", workerError);
@@ -57,6 +63,9 @@ const App: React.FC = () => {
   const handleClearData = useCallback(() => {
     setProcessedFrames([]);
     setSummaryMetrics(null);
+    setArrivalTrend([]);
+    setAggregatedTimeSeries(null);
+    setSeatUsageTimeline([]);
     setFileName('');
     setError(null);
     setIsLoading(false);
@@ -97,7 +106,10 @@ const App: React.FC = () => {
         {hasData && !error && !isLoading && processedFrames.length > 0 && summaryMetrics && (
           <Dashboard 
             processedFrames={processedFrames} 
-            summaryMetrics={summaryMetrics} 
+            summaryMetrics={summaryMetrics}
+            arrivalTrendData={arrivalTrend}
+            aggregatedTimeSeries={aggregatedTimeSeries}
+            seatUsageTimeline={seatUsageTimeline}
             fileName={fileName}
             onClearData={handleClearData}
           />

@@ -41,12 +41,36 @@ export interface GroupSizeDistributionDataPoint {
   frequency: number;
 }
 
+export interface ArrivalTrendDataPoint {
+  time: string; // e.g., "YYYY-MM-DD HH:00"
+  newVisitors: number;
+  newGroups: number;
+}
+
+export type TimeSeriesGranularity = 'raw' | '1min' | '15min' | 'hour';
+
+export interface AggregatedTimeSeries {
+  [key: string]: TimeSeriesDataPoint[];
+}
+
+export interface SeatUsageBlock {
+  seatId: string;
+  startTime: string; // ISO String
+  endTime: string;   // ISO String
+  duration: number;  // in minutes
+  personCount: number;
+  personIds: string[];
+}
+
 export interface SummaryMetrics {
   currentTotalCustomers: number;
   currentOccupiedTables: number;
   averageGroupSizeOverall: number;
   peakOccupancyTime: string;
   peakOccupancyCount: number;
+  totalUniqueVisitors: number;
+  totalUniqueGroups: number;
+  averageStayTime: number; // in minutes
 }
 
 export interface TableOccupancyOverTimeDataPoint {
