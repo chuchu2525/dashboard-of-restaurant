@@ -26,31 +26,30 @@
 
 ### 基本構造
 
+JSON ファイルは、フレームキーをトップレベルのキーとし、その値として各フレームで検出された人物情報の配列を持つオブジェクトである必要があります。
+
 ```json
 {
   "フレームキー1": [検出データ配列],
   "フレームキー2": [検出データ配列],
-  "フレームキー3": [検出データ配列]
+  ...
 }
 ```
 
 ### 検出データの必須項目
 
-各フレームの検出データ配列には、以下の項目を持つオブジェクトが含まれている必要があります：
+各検出データオブジェクトは、以下のフィールドを持つ必要があります。
 
-| 項目            | 型       | 説明                                    | 例                      |
-| --------------- | -------- | --------------------------------------- | ----------------------- |
-| `ID`            | number   | 検出 ID                                 | `1`                     |
-| `Name`          | string   | 人物名                                  | `"person1"`             |
-| `Class`         | number   | クラス番号                              | `0`                     |
-| `Score`         | number   | 検出スコア（0-1）                       | `0.95`                  |
-| `BBox`          | number[] | バウンディングボックス [x1, y1, x2, y2] | `[100, 200, 150, 300]`  |
-| `Time`          | string   | タイムスタンプ（YYYY-MM-DD HH:MM:SS）   | `"2023-12-01 12:00:00"` |
-| `Total`         | number   | このフレームの総検出数                  | `3`                     |
-| `TotalPerson`   | number   | このフレームの総人数                    | `3`                     |
-| `DetectedCount` | number   | 累積検出カウンター                      | `1`                     |
-| `SeatID`        | string   | 座席 ID                                 | `"table1"`              |
-| `SeatConfirmed` | boolean  | 座席確認フラグ                          | `true`                  |
+| 項目                | 型             | 説明                                      | 例                        |
+| :------------------ | :------------- | :---------------------------------------- | :------------------------ |
+| `frame_number`      | number         | フレーム番号                              | `1`                       |
+| `timestamp`         | string         | タイムスタンプ (YYYY-MM-DD HH:MM:SS)      | `"2025-06-19 19:12:30"`   |
+| `person_id`         | string         | 一意の人物 ID                             | `"ID_001"`                |
+| `bbox`              | number[]       | バウンディングボックス `[x1, y1, x2, y2]` | `[2732, 949, 3359, 1984]` |
+| `raw_seat_id`       | string \| null | AI による未加工の座席 ID                  | `"right"`                 |
+| `confirmed_seat_id` | string \| null | 確定した座席 ID（グループ分けに使用）     | `"table_1"`               |
+| `seat_status`       | string         | 座席の状態 ("Unassigned", "Assigned"など) | `"Assigned"`              |
+| `confidence`        | number         | 検出の信頼度スコア (0-1 の範囲)           | `0.9236`                  |
 
 ### 具体例
 
@@ -58,45 +57,46 @@
 {
   "frame_001": [
     {
-      "ID": 1,
-      "Name": "person1",
-      "Class": 0,
-      "Score": 0.95,
-      "BBox": [100, 200, 150, 300],
-      "Time": "2023-12-01 12:00:00",
-      "Total": 3,
-      "TotalPerson": 3,
-      "DetectedCount": 1,
-      "SeatID": "table1",
-      "SeatConfirmed": true
+      "frame_number": 1,
+      "timestamp": "2025-06-19 19:12:30",
+      "person_id": "ID_001",
+      "bbox": [2732, 949, 3359, 1984],
+      "raw_seat_id": "right",
+      "confirmed_seat_id": "table_1",
+      "seat_status": "Assigned",
+      "confidence": 0.923641562461853
     },
     {
-      "ID": 2,
-      "Name": "person2",
-      "Class": 0,
-      "Score": 0.88,
-      "BBox": [200, 250, 250, 350],
-      "Time": "2023-12-01 12:00:00",
-      "Total": 3,
-      "TotalPerson": 3,
-      "DetectedCount": 2,
-      "SeatID": "table1",
-      "SeatConfirmed": true
+      "frame_number": 1,
+      "timestamp": "2025-06-19 19:12:30",
+      "person_id": "ID_002",
+      "bbox": [0, 1469, 446, 1995],
+      "raw_seat_id": null,
+      "confirmed_seat_id": "table_1",
+      "seat_status": "Assigned",
+      "confidence": 0.9182910323143005
+    },
+    {
+      "frame_number": 1,
+      "timestamp": "2025-06-19 19:12:30",
+      "person_id": "ID_003",
+      "bbox": [319, 1528, 729, 1995],
+      "raw_seat_id": null,
+      "confirmed_seat_id": "table_2",
+      "seat_status": "Assigned",
+      "confidence": 0.8378861546516418
     }
   ],
   "frame_002": [
     {
-      "ID": 3,
-      "Name": "person3",
-      "Class": 0,
-      "Score": 0.92,
-      "BBox": [300, 150, 350, 250],
-      "Time": "2023-12-01 12:00:30",
-      "Total": 1,
-      "TotalPerson": 1,
-      "DetectedCount": 1,
-      "SeatID": "table2",
-      "SeatConfirmed": true
+      "frame_number": 2,
+      "timestamp": "2025-06-19 19:12:32",
+      "person_id": "ID_001",
+      "bbox": [2735, 951, 3361, 1986],
+      "raw_seat_id": "right",
+      "confirmed_seat_id": "table_1",
+      "seat_status": "Assigned",
+      "confidence": 0.925
     }
   ]
 }
