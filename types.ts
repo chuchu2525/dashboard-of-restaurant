@@ -1,15 +1,12 @@
 export interface PersonDetection {
-  ID: number;
-  Name: string;
-  Class: number;
-  Score: number;
-  BBox: [number, number, number, number];
-  Time: string; // "YYYY-MM-DD HH:MM:SS"
-  Total: number; // Total detections in this frame (seems same as TotalPerson)
-  TotalPerson: number; // Total persons in this frame
-  DetectedCount: number; // Cumulative detection counter
-  SeatID: string; // e.g., "table3"
-  SeatConfirmed: boolean;
+  frame_number: number;
+  timestamp: string;
+  person_id: string;
+  bbox: [number, number, number, number];
+  raw_seat_id: string | null;
+  confirmed_seat_id: string | null;
+  seat_status: string;
+  confidence: number;
 }
 
 export interface FrameDetections extends Array<PersonDetection> {}
