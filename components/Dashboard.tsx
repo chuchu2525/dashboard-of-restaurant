@@ -10,6 +10,7 @@ interface DashboardProps {
   arrivalTrendData: ArrivalTrendDataPoint[];
   aggregatedTimeSeries: AggregatedTimeSeries | null;
   seatUsageTimeline: SeatUsageBlock[];
+  interpolatedOccupancyData: TableOccupancyOverTimeDataPoint[];
   fileName: string;
   onClearData: () => void;
 }
@@ -121,6 +122,26 @@ const GanttTooltip = ({ active, payload, label }: any) => {
   return null;
 };
 
+const CustomGanttLegend = () => {
+  const legendItems = [
+    { value: '1 Person', color: getGroupColor(1) },
+    { value: '2 People', color: getGroupColor(2) },
+    { value: '3-4 People', color: getGroupColor(3) },
+    { value: '5+ People', color: getGroupColor(5) },
+  ];
+
+  return (
+    <div className="flex justify-center items-center space-x-4 mt-3">
+      {legendItems.map(item => (
+        <div key={item.value} className="flex items-center">
+          <div className="w-3.5 h-3.5 rounded-full mr-2" style={{ backgroundColor: item.color }}></div>
+          <span className="text-xs text-slate-300">{item.value}</span>
+        </div>
+      ))}
+    </div>
+  );
+};
+
 const getGroupColor = (personCount: number) => {
     if (personCount === 1) return '#3b82f6'; // Blue
     if (personCount === 2) return '#22c55e'; // Green
@@ -129,7 +150,7 @@ const getGroupColor = (personCount: number) => {
     return '#6b7280'; // Gray for unknown/0
 };
 
-export const Dashboard: React.FC<DashboardProps> = ({ processedFrames, summaryMetrics, arrivalTrendData, aggregatedTimeSeries, seatUsageTimeline, fileName, onClearData }) => {
+export const Dashboard: React.FC<DashboardProps> = ({ processedFrames, summaryMetrics, arrivalTrendData, aggregatedTimeSeries, seatUsageTimeline, interpolatedOccupancyData, fileName, onClearData }) => {
   const [aiSuggestions, setAiSuggestions] = useState<string | null>(null);
   const [isGeneratingSuggestions, setIsGeneratingSuggestions] = useState<boolean>(false);
   const [aiSuggestionsError, setAiSuggestionsError] = useState<string | null>(aiInitializationError); // Initialize with potential AI client error
@@ -490,46 +511,87 @@ Based on this data, here are your recommendations:
         )}
       </div>
 
+      <div className="bg-slate-800 p-6 rounded-xl shadow-2xl">
+        <h3 className="text-xl font-semibold mb-2 text-sky-300">Interpreted Table Occupancy (with absence tolerance)</h3>
+        <p className="text-xs text-slate-400 mb-4 -mt-1">This chart shows continuous table usage, smoothing over short breaks (up to 5 mins) to reflect actual session durations.</p>
+        {interpolatedOccupancyData.length > 0 && allSeatIds.length > 0 ? (
+          <ResponsiveContainer width="100%" height={400}>
+            <LineChart data={interpolatedOccupancyData}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#4A5568" />
+              <XAxis dataKey="time" stroke="#90CDF4" />
+              <YAxis stroke="#90CDF4" allowDecimals={false} />
+              <Tooltip content={<CustomTooltip />} />
+              <Legend wrapperStyle={{color: "#E2E8F0"}} />
+              {allSeatIds.map((seatId, index) => (
+                <Line
+                  key={seatId}
+                  type="monotone"
+                  dataKey={seatId}
+                  name={seatId}
+                  stroke={COLORS[index % COLORS.length]}
+                  strokeWidth={2}
+                  dot={{ r: 2 }}
+                  activeDot={{ r: 5 }}
+                />
+              ))}
+            </LineChart>
+          </ResponsiveContainer>
+        ) : (
+          <p className="text-slate-400 text-center py-10">No interpreted table occupancy data available.</p>
+        )}
+      </div>
+
       {/* Seat Usage Timeline Section */}
       <div className="bg-slate-800 p-6 rounded-xl shadow-2xl">
         <h3 className="text-xl font-semibold mb-4 text-sky-300">Seat Usage Timeline (Gantt View)</h3>
         {ganttChartData.length > 0 ? (
-          <ResponsiveContainer width="100%" height={ganttChartData.length * 60 + 50}>
-            <BarChart
-              data={ganttChartData}
-              layout="vertical"
-              margin={{ top: 5, right: 30, left: 100, bottom: 20 }}
-              barCategoryGap="30%"
-            >
-              <CartesianGrid strokeDasharray="3 3" stroke="#4A5568" />
-              <XAxis 
-                type="number" 
-                stroke="#90CDF4" 
-                domain={[0, 'dataMax']}
-                label={{ value: 'Duration (minutes)', position: 'bottom', fill: '#90CDF4' }}
-              />
-              <YAxis 
-                type="category" 
-                dataKey="seatId" 
-                stroke="#90CDF4" 
-                width={80}
-                tickFormatter={(value) => value.charAt(0).toUpperCase() + value.slice(1)}
-              />
-              <Tooltip content={<GanttTooltip />} cursor={{ fill: 'rgba(100, 116, 139, 0.2)' }}/>
-              <Legend />
-              
-              {Array.from({ length: maxBlocks }).map((_, i) => (
-                <Bar 
-                  key={i}
-                  dataKey={`block_${i}_duration`} 
-                  stackId="a" 
-                  name={`Visit ${i+1}`}
-                  fill={getGroupColor(i + 1)}
-                  isAnimationActive={false}
+          <>
+            <ResponsiveContainer width="100%" height={ganttChartData.length * 60 + 50}>
+              <BarChart
+                data={ganttChartData}
+                layout="vertical"
+                margin={{ top: 5, right: 30, left: 100, bottom: 5 }}
+                barCategoryGap="30%"
+              >
+                <CartesianGrid strokeDasharray="3 3" stroke="#4A5568" />
+                <XAxis 
+                  type="number" 
+                  stroke="#90CDF4" 
+                  domain={[0, 'dataMax']}
+                  label={{ value: 'Duration (minutes)', position: 'bottom', fill: '#90CDF4', dy: 10 }}
                 />
-              ))}
-            </BarChart>
-          </ResponsiveContainer>
+                <YAxis 
+                  type="category" 
+                  dataKey="seatId" 
+                  stroke="#90CDF4" 
+                  width={80}
+                  tickFormatter={(value) => value.charAt(0).toUpperCase() + value.slice(1)}
+                />
+                <Tooltip content={<GanttTooltip />} cursor={{ fill: 'rgba(100, 116, 139, 0.2)' }}/>
+                
+                {Array.from({ length: maxBlocks }).map((_, i) => (
+                  <Bar 
+                    key={i}
+                    dataKey={`block_${i}_duration`} 
+                    stackId="a" 
+                    name={`Visit ${i+1}`}
+                    isAnimationActive={false}
+                  >
+                    {ganttChartData.map((entry, cellIndex) => {
+                      const block = entry[`block_${i}_details`];
+                      return (
+                        <Cell 
+                          key={`cell-${cellIndex}`} 
+                          fill={block ? getGroupColor(block.personCount) : 'transparent'} 
+                        />
+                      );
+                    })}
+                  </Bar>
+                ))}
+              </BarChart>
+            </ResponsiveContainer>
+            <CustomGanttLegend />
+          </>
         ) : (
           <p className="text-slate-400 text-center py-10">No seat usage data available to display timeline.</p>
         )}

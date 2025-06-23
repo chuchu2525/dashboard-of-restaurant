@@ -1,4 +1,4 @@
-import { RestaurantData, ProcessedFrame, SummaryMetrics, SeatOccupancyDataPoint, ArrivalTrendDataPoint, AggregatedTimeSeries, TimeSeriesDataPoint, SeatUsageBlock } from './types';
+import { RestaurantData, ProcessedFrame, SummaryMetrics, SeatOccupancyDataPoint, ArrivalTrendDataPoint, AggregatedTimeSeries, TimeSeriesDataPoint, SeatUsageBlock, TableOccupancyOverTimeDataPoint } from './types';
 
 function downsample<T>(frames: T[], maxPoints: number = 500): T[] {
   if (frames.length <= maxPoints) {
@@ -79,9 +79,55 @@ function aggregateTimeSeries(frames: ProcessedFrame[]): AggregatedTimeSeries {
     return aggregations;
 }
 
+function generateInterpolatedOccupancy(
+  allFrames: ProcessedFrame[],
+  seatUsageTimeline: SeatUsageBlock[]
+): TableOccupancyOverTimeDataPoint[] {
+  if (allFrames.length === 0 || seatUsageTimeline.length === 0) {
+    return [];
+  }
+
+  const allSeatIds = Array.from(new Set(seatUsageTimeline.map(b => b.seatId))).sort();
+  const seatBlocksBySeatId = new Map<string, SeatUsageBlock[]>();
+
+  allSeatIds.forEach(id => seatBlocksBySeatId.set(id, []));
+  seatUsageTimeline.forEach(block => {
+    seatBlocksBySeatId.get(block.seatId)?.push(block);
+  });
+
+  const interpolatedData = allFrames.map(frame => {
+    const frameTimestamp = new Date(frame.fullTimestamp).getTime();
+    const dataPoint: TableOccupancyOverTimeDataPoint = { time: frame.time };
+
+    allSeatIds.forEach(seatId => {
+      const blocks = seatBlocksBySeatId.get(seatId) || [];
+      let persons = 0;
+      for (const block of blocks) {
+        const start = new Date(block.startTime).getTime();
+        const end = new Date(block.endTime).getTime();
+        if (frameTimestamp >= start && frameTimestamp <= end) {
+          persons = block.personCount;
+          break; // Found the block for this timestamp
+        }
+      }
+      dataPoint[seatId] = persons;
+    });
+
+    return dataPoint;
+  });
+
+  // Downsample the interpolated data to a reasonable number of points for display
+  return downsample(interpolatedData, 500);
+}
+
 function generateSeatUsageTimeline(allFrames: ProcessedFrame[]): SeatUsageBlock[] {
     const usageBlocks: SeatUsageBlock[] = [];
     if (allFrames.length === 0) return usageBlocks;
+
+    // 9000フレームをミリ秒に変換 (30fpsと仮定)
+    const FRAME_RATE_HZ = 30;
+    const ABSENCE_THRESHOLD_FRAMES = 9000;
+    const ABSENCE_THRESHOLD_MS = (ABSENCE_THRESHOLD_FRAMES / FRAME_RATE_HZ) * 1000;
 
     const seatStates = new Map<string, {
         personIds: string; // Stored as a sorted, comma-separated string
@@ -89,29 +135,37 @@ function generateSeatUsageTimeline(allFrames: ProcessedFrame[]): SeatUsageBlock[
         lastSeenTime: number;
         personCount: number;
     }>();
+
+    // 席を離れたが、まだ戻ってくる可能性があるセッションを保持する
+    const pendingFinalization = new Map<string, { session: any, disappearanceTime: number }>();
     
     // Finalize a session and add it to the blocks array
-    const finalizeSession = (seatId: string, endTime: number) => {
-        const state = seatStates.get(seatId);
-        if (!state) return;
-        const duration = Math.round((endTime - state.startTime) / 60000);
+    const finalizeSession = (session: any) => {
+        const duration = Math.round((session.lastSeenTime - session.startTime) / 60000); // in minutes
         if (duration > 0) {
             usageBlocks.push({
-                seatId: seatId,
-                startTime: new Date(state.startTime).toISOString(),
-                endTime: new Date(endTime).toISOString(),
+                seatId: session.seatId,
+                startTime: new Date(session.startTime).toISOString(),
+                endTime: new Date(session.lastSeenTime).toISOString(),
                 duration,
-                personCount: state.personCount,
-                personIds: state.personIds.split(','),
+                personCount: session.personCount,
+                personIds: session.personIds.split(','),
             });
         }
-        seatStates.delete(seatId);
     };
 
     allFrames.forEach((frame) => {
         const frameTimestamp = new Date(frame.fullTimestamp).getTime();
         const seatsInFrame = new Map<string, string[]>();
         const seatsInFrameById = new Map<string, string>();
+
+        // まず、保留中のセッションで、不在許容時間を超えたものを確定させる
+        for (const [seatId, pending] of pendingFinalization.entries()) {
+            if (frameTimestamp - pending.disappearanceTime > ABSENCE_THRESHOLD_MS) {
+                finalizeSession(pending.session);
+                pendingFinalization.delete(seatId);
+            }
+        }
 
         frame.detections.forEach(det => {
             const seatId = det.confirmed_seat_id || det.raw_seat_id;
@@ -133,35 +187,70 @@ function generateSeatUsageTimeline(allFrames: ProcessedFrame[]): SeatUsageBlock[
             if (state.personIds === currentGroupId) {
                 state.lastSeenTime = frameTimestamp;
             } else {
-                finalizeSession(seatId, state.lastSeenTime);
+                // Group has changed or disappeared. Move to pending.
+                pendingFinalization.set(seatId, {
+                    session: { ...state, seatId },
+                    disappearanceTime: state.lastSeenTime
+                });
+                seatStates.delete(seatId);
+                
                 if (currentGroupId) {
-                     seatStates.set(seatId, {
-                        personIds: currentGroupId,
+                     // A new group has appeared immediately. Check if it's a pending group returning.
+                     const pendingSession = pendingFinalization.get(seatId);
+                     if (pendingSession && pendingSession.session.personIds === currentGroupId) {
+                         // It's the same group returning within the threshold!
+                         seatStates.set(seatId, pendingSession.session);
+                         seatStates.get(seatId)!.lastSeenTime = frameTimestamp;
+                         pendingFinalization.delete(seatId);
+                     } else {
+                        // It's a brand new group.
+                        seatStates.set(seatId, {
+                            personIds: currentGroupId,
+                            startTime: frameTimestamp,
+                            lastSeenTime: frameTimestamp,
+                            personCount: seatsInFrame.get(seatId)!.length,
+                        });
+                     }
+                }
+            }
+            checkedSeats.add(seatId);
+        }
+
+        // Check for brand new sessions or returning sessions
+        for (const [seatId, groupId] of seatsInFrameById.entries()) {
+            if (!checkedSeats.has(seatId)) {
+                const pendingSession = pendingFinalization.get(seatId);
+                if (pendingSession && pendingSession.session.personIds === groupId) {
+                    // This group was temporarily away and has now returned.
+                    // Restore the session from pending.
+                    seatStates.set(seatId, pendingSession.session);
+                    seatStates.get(seatId)!.lastSeenTime = frameTimestamp; // Update last seen time
+                    pendingFinalization.delete(seatId); // Remove from pending
+                } else {
+                    // This is a genuinely new session.
+                    if (pendingSession) {
+                        // A different group was here before. Finalize the old session.
+                        finalizeSession(pendingSession.session);
+                        pendingFinalization.delete(seatId);
+                    }
+                    seatStates.set(seatId, {
+                        personIds: groupId,
                         startTime: frameTimestamp,
                         lastSeenTime: frameTimestamp,
                         personCount: seatsInFrame.get(seatId)!.length,
                     });
                 }
             }
-            checkedSeats.add(seatId);
-        }
-
-        // Check for brand new sessions
-        for (const [seatId, groupId] of seatsInFrameById.entries()) {
-            if (!checkedSeats.has(seatId)) {
-                seatStates.set(seatId, {
-                    personIds: groupId,
-                    startTime: frameTimestamp,
-                    lastSeenTime: frameTimestamp,
-                    personCount: seatsInFrame.get(seatId)!.length,
-                });
-            }
         }
     });
 
-    // After the loop, close any remaining open sessions
-    for (const seatId of seatStates.keys()) {
-        finalizeSession(seatId, seatStates.get(seatId)!.lastSeenTime);
+    // After the loop, close any remaining active and pending sessions
+    for (const state of seatStates.values()) {
+        const session = { ...state, seatId: [...seatStates.entries()].find(([key, val]) => val === state)?.[0] || '' };
+        finalizeSession(session);
+    }
+    for (const pending of pendingFinalization.values()) {
+        finalizeSession(pending.session);
     }
     
     return usageBlocks.sort((a,b) => new Date(a.startTime).getTime() - new Date(b.startTime).getTime());
@@ -173,7 +262,8 @@ function processData(data: RestaurantData): {
   summaryMetrics: SummaryMetrics, 
   arrivalTrendData: ArrivalTrendDataPoint[],
   aggregatedTimeSeries: AggregatedTimeSeries,
-  seatUsageTimeline: SeatUsageBlock[]
+  seatUsageTimeline: SeatUsageBlock[],
+  interpolatedOccupancyData: TableOccupancyOverTimeDataPoint[],
 } {
   const allFrames: ProcessedFrame[] = Object.entries(data)
     .map(([frameKey, detections]) => {
@@ -311,11 +401,12 @@ function processData(data: RestaurantData): {
   // --- Generate aggregated data for charts ---
   const aggregatedTimeSeries = aggregateTimeSeries(allFrames);
   const seatUsageTimeline = generateSeatUsageTimeline(allFrames);
+  const interpolatedOccupancyData = generateInterpolatedOccupancy(allFrames, seatUsageTimeline);
   
   // Downsample the detailed frame data for sending to the UI
   const processedFrames = downsample(allFrames);
 
-  return { processedFrames, summaryMetrics, arrivalTrendData, aggregatedTimeSeries, seatUsageTimeline };
+  return { processedFrames, summaryMetrics, arrivalTrendData, aggregatedTimeSeries, seatUsageTimeline, interpolatedOccupancyData };
 }
 
 self.onmessage = (e: MessageEvent<string>) => {

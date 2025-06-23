@@ -1,7 +1,7 @@
 import React, { useState, useCallback, useEffect } from 'react';
 import { FileUpload } from './components/FileUpload';
 import { Dashboard } from './components/Dashboard';
-import { RestaurantData, ProcessedFrame, SummaryMetrics, ArrivalTrendDataPoint, AggregatedTimeSeries, SeatUsageBlock } from './types';
+import { RestaurantData, ProcessedFrame, SummaryMetrics, ArrivalTrendDataPoint, AggregatedTimeSeries, SeatUsageBlock, TableOccupancyOverTimeDataPoint } from './types';
 
 const App: React.FC = () => {
   const [processedFrames, setProcessedFrames] = useState<ProcessedFrame[]>([]);
@@ -9,6 +9,7 @@ const App: React.FC = () => {
   const [arrivalTrend, setArrivalTrend] = useState<ArrivalTrendDataPoint[]>([]);
   const [aggregatedTimeSeries, setAggregatedTimeSeries] = useState<AggregatedTimeSeries | null>(null);
   const [seatUsageTimeline, setSeatUsageTimeline] = useState<SeatUsageBlock[]>([]);
+  const [interpolatedOccupancyData, setInterpolatedOccupancyData] = useState<TableOccupancyOverTimeDataPoint[]>([]);
   const [fileName, setFileName] = useState<string>('');
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(false);
@@ -33,6 +34,7 @@ const App: React.FC = () => {
         setArrivalTrend(data.arrivalTrendData);
         setAggregatedTimeSeries(data.aggregatedTimeSeries);
         setSeatUsageTimeline(data.seatUsageTimeline);
+        setInterpolatedOccupancyData(data.interpolatedOccupancyData);
         setHasData(true);
       } else {
         console.error("Error from worker:", workerError);
@@ -66,6 +68,7 @@ const App: React.FC = () => {
     setArrivalTrend([]);
     setAggregatedTimeSeries(null);
     setSeatUsageTimeline([]);
+    setInterpolatedOccupancyData([]);
     setFileName('');
     setError(null);
     setIsLoading(false);
@@ -110,6 +113,7 @@ const App: React.FC = () => {
             arrivalTrendData={arrivalTrend}
             aggregatedTimeSeries={aggregatedTimeSeries}
             seatUsageTimeline={seatUsageTimeline}
+            interpolatedOccupancyData={interpolatedOccupancyData}
             fileName={fileName}
             onClearData={handleClearData}
           />
