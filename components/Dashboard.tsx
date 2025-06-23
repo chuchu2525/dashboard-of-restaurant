@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { ProcessedFrame, SummaryMetrics, TimeSeriesDataPoint, SeatOccupancyDataPoint, GroupSizeDistributionDataPoint, TableOccupancyOverTimeDataPoint } from '../types';
+import { ProcessedFrame, SummaryMetrics, TimeSeriesDataPoint, SeatOccupancyDataPoint, GroupSizeDistributionDataPoint, TableOccupancyOverTimeDataPoint, ArrivalTrendDataPoint, AggregatedTimeSeries, TimeSeriesGranularity, SeatUsageBlock } from '../types';
 import { ResponsiveContainer, LineChart, Line, BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend } from 'recharts';
 import { MetricCard } from './MetricCard';
 import { GoogleGenAI, GenerateContentResponse } from "@google/genai";
@@ -7,6 +7,10 @@ import { GoogleGenAI, GenerateContentResponse } from "@google/genai";
 interface DashboardProps {
   processedFrames: ProcessedFrame[];
   summaryMetrics: SummaryMetrics;
+  arrivalTrendData: ArrivalTrendDataPoint[];
+  aggregatedTimeSeries: AggregatedTimeSeries | null;
+  seatUsageTimeline: SeatUsageBlock[];
+  interpolatedOccupancyData: TableOccupancyOverTimeDataPoint[];
   fileName: string;
   onClearData: () => void;
 }
@@ -86,20 +90,80 @@ const formatAiSuggestions = (text: string): React.ReactNode => {
   return <div className="prose prose-sm prose-invert max-w-none">{listItems}</div>;
 };
 
+const GanttTooltip = ({ active, payload, label }: any) => {
+  if (active && payload && payload.length) {
+    const data = payload[0].payload;
+    const dataKey = payload[0].dataKey as string;
+    const value = payload[0].value;
 
-export const Dashboard: React.FC<DashboardProps> = ({ processedFrames, summaryMetrics, fileName, onClearData }) => {
+    // Extract block index from dataKey like "block_0_duration"
+    const match = dataKey.match(/block_(\d+)_duration/);
+    if (!match) return null;
+
+    const blockIndex = match[1];
+    const block = data[`block_${blockIndex}_details`];
+    if (!block) return null;
+
+    return (
+      <div className="bg-slate-700 p-3 rounded shadow-lg border border-slate-600 text-sm">
+        <p className="font-bold text-sky-300">{data.seatId}</p>
+        <p className="text-slate-300">
+          Start: {new Date(block.startTime).toLocaleTimeString('en-GB')}
+        </p>
+        <p className="text-slate-300">
+          End: {new Date(block.endTime).toLocaleTimeString('en-GB')}
+        </p>
+        <p className="text-slate-300">Duration: {block.duration} min</p>
+        <p className="text-slate-300">Group Size: {block.personCount} people</p>
+        <p className="text-slate-300">Group IDs: {block.personIds.join(', ')}</p>
+      </div>
+    );
+  }
+  return null;
+};
+
+const CustomGanttLegend = () => {
+  const legendItems = [
+    { value: '1 Person', color: getGroupColor(1) },
+    { value: '2 People', color: getGroupColor(2) },
+    { value: '3-4 People', color: getGroupColor(3) },
+    { value: '5+ People', color: getGroupColor(5) },
+  ];
+
+  return (
+    <div className="flex justify-center items-center space-x-4 mt-3">
+      {legendItems.map(item => (
+        <div key={item.value} className="flex items-center">
+          <div className="w-3.5 h-3.5 rounded-full mr-2" style={{ backgroundColor: item.color }}></div>
+          <span className="text-xs text-slate-300">{item.value}</span>
+        </div>
+      ))}
+    </div>
+  );
+};
+
+const getGroupColor = (personCount: number) => {
+    if (personCount === 1) return '#3b82f6'; // Blue
+    if (personCount === 2) return '#22c55e'; // Green
+    if (personCount >= 3 && personCount <= 4) return '#f97316'; // Orange
+    if (personCount > 4) return '#ef4444'; // Red
+    return '#6b7280'; // Gray for unknown/0
+};
+
+export const Dashboard: React.FC<DashboardProps> = ({ processedFrames, summaryMetrics, arrivalTrendData, aggregatedTimeSeries, seatUsageTimeline, interpolatedOccupancyData, fileName, onClearData }) => {
   const [aiSuggestions, setAiSuggestions] = useState<string | null>(null);
   const [isGeneratingSuggestions, setIsGeneratingSuggestions] = useState<boolean>(false);
   const [aiSuggestionsError, setAiSuggestionsError] = useState<string | null>(aiInitializationError); // Initialize with potential AI client error
+  const [timeSeriesGranularity, setTimeSeriesGranularity] = useState<TimeSeriesGranularity>('15min');
 
   if (processedFrames.length === 0) {
     return <p className="text-center text-xl">No data to display.</p>;
   }
 
-  const timeSeriesData: TimeSeriesDataPoint[] = processedFrames.map(frame => ({
-    time: frame.time,
-    totalPersons: frame.totalPersons,
-  }));
+  const timeSeriesData: TimeSeriesDataPoint[] = useMemo(() => {
+    if (!aggregatedTimeSeries) return [];
+    return aggregatedTimeSeries[timeSeriesGranularity] || [];
+  }, [aggregatedTimeSeries, timeSeriesGranularity]);
 
   const latestFrame = processedFrames[processedFrames.length - 1];
   const seatOccupancyData: SeatOccupancyDataPoint[] = latestFrame.seatOccupancy
@@ -143,6 +207,52 @@ export const Dashboard: React.FC<DashboardProps> = ({ processedFrames, summaryMe
     });
     return dataPoint;
   });
+
+  const ganttChartData = useMemo(() => {
+        if (seatUsageTimeline.length === 0) return [];
+        console.log('[Debug] Input to Gantt Chart processing:', seatUsageTimeline);
+        
+        const seatData = new Map<string, { seatId: string, blocks: any[] }>();
+        
+        // Initialize all seats
+        const allSeatIds = Array.from(new Set(seatUsageTimeline.map(b => b.seatId))).sort();
+        allSeatIds.forEach(id => {
+            seatData.set(id, { seatId: id, blocks: [] });
+        });
+
+        // Populate blocks
+        for(const block of seatUsageTimeline) {
+            const entry = seatData.get(block.seatId);
+            if(entry) {
+                entry.blocks.push(block);
+            }
+        }
+        
+        const chartData = Array.from(seatData.values()).map(seatInfo => {
+            const dataRow: any = { seatId: seatInfo.seatId };
+            
+            seatInfo.blocks.sort((a,b) => new Date(a.startTime).getTime() - new Date(b.startTime).getTime());
+            
+            // 累積時間でバーを作成
+            let cumulativeTime = 0;
+            seatInfo.blocks.forEach((block, index) => {
+                const duration = block.duration;
+                dataRow[`block_${index}_start`] = cumulativeTime;
+                dataRow[`block_${index}_duration`] = duration;
+                dataRow[`block_${index}_details`] = block;
+                cumulativeTime += duration;
+            });
+
+            return dataRow;
+        });
+        console.log('[Debug] Gantt Chart data structure:', chartData);
+        return chartData;
+    }, [seatUsageTimeline]);
+
+    const maxBlocks = useMemo(() => {
+        if (!ganttChartData || ganttChartData.length === 0) return 0;
+        return Math.max(...ganttChartData.map(row => Object.keys(row).filter(k => k.endsWith('_details')).length));
+    }, [ganttChartData]);
 
   const handleGenerateSuggestions = async () => {
     if (!ai) {
@@ -208,7 +318,7 @@ Based on this data, here are your recommendations:
         model: 'gemini-2.5-flash-preview-04-17',
         contents: prompt,
       });
-      setAiSuggestions(response.text);
+      setAiSuggestions(response.text ?? null);
     } catch (error) {
       console.error("Error generating AI suggestions:", error);
       const errorMessage = error instanceof Error ? error.message : "An unknown error occurred while fetching suggestions.";
@@ -232,18 +342,70 @@ Based on this data, here are your recommendations:
         </button>
       </div>
 
+      {/* --- Visit Summary Section --- */}
+      <div className="bg-slate-800 p-6 rounded-xl shadow-2xl">
+        <h3 className="text-xl font-semibold mb-4 text-sky-300">Visit Summary & Trends</h3>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-6 mb-6">
+          <MetricCard title="Total Unique Groups" value={summaryMetrics.totalUniqueGroups.toLocaleString()} subtitle="Across the entire duration" />
+          <MetricCard title="Total Unique Visitors" value={summaryMetrics.totalUniqueVisitors.toLocaleString()} subtitle="Across the entire duration" />
+          <MetricCard title="Avg. Stay Time (per person)" value={`${summaryMetrics.averageStayTime.toLocaleString()} min`} subtitle="Across the entire duration" />
+          <MetricCard title="Peak Concurrent Visitors" value={`${summaryMetrics.peakOccupancyCount.toLocaleString()} `} subtitle={`at ${summaryMetrics.peakOccupancyTime}`} />
+        </div>
+        
+        {arrivalTrendData.length > 0 ? (
+          <ResponsiveContainer width="100%" height={300}>
+            <LineChart data={arrivalTrendData}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#4A5568" />
+              <XAxis dataKey="time" stroke="#90CDF4" tick={{ fontSize: 12 }} />
+              <YAxis yAxisId="left" stroke="#38BDF8" allowDecimals={false} />
+              <YAxis yAxisId="right" orientation="right" stroke="#34D399" allowDecimals={false} />
+              <Tooltip content={<CustomTooltip />} />
+              <Legend wrapperStyle={{color: "#E2E8F0"}}/>
+              <Line yAxisId="left" type="monotone" dataKey="newVisitors" name="New Visitors (per hour)" stroke="#38BDF8" strokeWidth={2} />
+              <Line yAxisId="right" type="monotone" dataKey="newGroups" name="New Groups (per hour)" stroke="#34D399" strokeWidth={2} />
+            </LineChart>
+          </ResponsiveContainer>
+        ) : (
+          <p className="text-slate-400 text-center py-10">No arrival trend data available.</p>
+        )}
+      </div>
+
+      {/* --- Current Status Section --- */}
+      <h3 className="text-2xl font-bold text-center text-white -mb-4">Current & Real-time Snapshot</h3>
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-2 gap-6">
+        <MetricCard title="Current Customers" value={summaryMetrics.currentTotalCustomers.toLocaleString()} />
+        <MetricCard title="Occupied Tables (Now)" value={summaryMetrics.currentOccupiedTables.toLocaleString()} />
+      </div>
+
       {/* Summary Metrics */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         <MetricCard title="Current Customers" value={summaryMetrics.currentTotalCustomers.toLocaleString()} />
         <MetricCard title="Occupied Tables (Now)" value={summaryMetrics.currentOccupiedTables.toLocaleString()} />
         <MetricCard title="Avg. Group Size (Overall)" value={summaryMetrics.averageGroupSizeOverall.toLocaleString()} />
-        <MetricCard title="Peak Occupancy" value={`${summaryMetrics.peakOccupancyCount.toLocaleString()} customers`} subtitle={`at ${summaryMetrics.peakOccupancyTime}`} />
       </div>
 
       {/* Charts Row 1 */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+      <div className="grid grid-cols-1 lg:grid-cols-1 gap-8">
         <div className="bg-slate-800 p-6 rounded-xl shadow-2xl">
-          <h3 className="text-xl font-semibold mb-4 text-sky-300">Total Customers Over Time</h3>
+          <div className="flex flex-wrap justify-between items-center mb-4">
+            <h3 className="text-xl font-semibold text-sky-300">Total Customers Over Time</h3>
+            <div className="flex items-center space-x-2">
+              <span className="text-sm text-slate-400">Granularity:</span>
+              {(['raw', '1min', '15min', 'hour'] as TimeSeriesGranularity[]).map((gran) => (
+                <button
+                  key={gran}
+                  onClick={() => setTimeSeriesGranularity(gran)}
+                  className={`px-3 py-1 text-sm font-medium rounded-md transition-colors ${
+                    timeSeriesGranularity === gran
+                      ? 'bg-sky-600 text-white'
+                      : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
+                  }`}
+                >
+                  {gran}
+                </button>
+              ))}
+            </div>
+          </div>
           <ResponsiveContainer width="100%" height={300}>
             <LineChart data={timeSeriesData}>
               <CartesianGrid strokeDasharray="3 3" stroke="#4A5568" />
@@ -251,7 +413,7 @@ Based on this data, here are your recommendations:
               <YAxis stroke="#90CDF4" allowDecimals={false} />
               <Tooltip content={<CustomTooltip />} />
               <Legend wrapperStyle={{color: "#E2E8F0"}} />
-              <Line type="monotone" dataKey="totalPersons" name="Total Customers" stroke="#38BDF8" strokeWidth={2} dot={{ r: 4, fill: '#38BDF8' }} activeDot={{ r: 6 }} />
+              <Line type="monotone" dataKey="totalPersons" name="Total Customers" stroke="#38BDF8" strokeWidth={2} dot={timeSeriesData.length < 100 ? { r: 4, fill: '#38BDF8' } : false} activeDot={{ r: 6 }} />
             </LineChart>
           </ResponsiveContainer>
         </div>
@@ -346,6 +508,92 @@ Based on this data, here are your recommendations:
           </ResponsiveContainer>
         ) : (
           <p className="text-slate-400 text-center py-10">No table occupancy data available to display trends.</p>
+        )}
+      </div>
+
+      <div className="bg-slate-800 p-6 rounded-xl shadow-2xl">
+        <h3 className="text-xl font-semibold mb-2 text-sky-300">Interpreted Table Occupancy (with absence tolerance)</h3>
+        <p className="text-xs text-slate-400 mb-4 -mt-1">This chart shows continuous table usage, smoothing over short breaks (up to 5 mins) to reflect actual session durations.</p>
+        {interpolatedOccupancyData.length > 0 && allSeatIds.length > 0 ? (
+          <ResponsiveContainer width="100%" height={400}>
+            <LineChart data={interpolatedOccupancyData}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#4A5568" />
+              <XAxis dataKey="time" stroke="#90CDF4" />
+              <YAxis stroke="#90CDF4" allowDecimals={false} />
+              <Tooltip content={<CustomTooltip />} />
+              <Legend wrapperStyle={{color: "#E2E8F0"}} />
+              {allSeatIds.map((seatId, index) => (
+                <Line
+                  key={seatId}
+                  type="monotone"
+                  dataKey={seatId}
+                  name={seatId}
+                  stroke={COLORS[index % COLORS.length]}
+                  strokeWidth={2}
+                  dot={{ r: 2 }}
+                  activeDot={{ r: 5 }}
+                />
+              ))}
+            </LineChart>
+          </ResponsiveContainer>
+        ) : (
+          <p className="text-slate-400 text-center py-10">No interpreted table occupancy data available.</p>
+        )}
+      </div>
+
+      {/* Seat Usage Timeline Section */}
+      <div className="bg-slate-800 p-6 rounded-xl shadow-2xl">
+        <h3 className="text-xl font-semibold mb-4 text-sky-300">Seat Usage Timeline (Gantt View)</h3>
+        {ganttChartData.length > 0 ? (
+          <>
+            <ResponsiveContainer width="100%" height={ganttChartData.length * 60 + 50}>
+              <BarChart
+                data={ganttChartData}
+                layout="vertical"
+                margin={{ top: 5, right: 30, left: 100, bottom: 5 }}
+                barCategoryGap="30%"
+              >
+                <CartesianGrid strokeDasharray="3 3" stroke="#4A5568" />
+                <XAxis 
+                  type="number" 
+                  stroke="#90CDF4" 
+                  domain={[0, 'dataMax']}
+                  label={{ value: 'Duration (minutes)', position: 'bottom', fill: '#90CDF4', dy: 10 }}
+                />
+                <YAxis 
+                  type="category" 
+                  dataKey="seatId" 
+                  stroke="#90CDF4" 
+                  width={80}
+                  tickFormatter={(value) => value.charAt(0).toUpperCase() + value.slice(1)}
+                />
+                <Tooltip content={<GanttTooltip />} cursor={{ fill: 'rgba(100, 116, 139, 0.2)' }}/>
+                
+                {Array.from({ length: maxBlocks }).map((_, i) => (
+                  <Bar 
+                    key={i}
+                    dataKey={`block_${i}_duration`} 
+                    stackId="a" 
+                    name={`Visit ${i+1}`}
+                    isAnimationActive={false}
+                  >
+                    {ganttChartData.map((entry, cellIndex) => {
+                      const block = entry[`block_${i}_details`];
+                      return (
+                        <Cell 
+                          key={`cell-${cellIndex}`} 
+                          fill={block ? getGroupColor(block.personCount) : 'transparent'} 
+                        />
+                      );
+                    })}
+                  </Bar>
+                ))}
+              </BarChart>
+            </ResponsiveContainer>
+            <CustomGanttLegend />
+          </>
+        ) : (
+          <p className="text-slate-400 text-center py-10">No seat usage data available to display timeline.</p>
         )}
       </div>
 
