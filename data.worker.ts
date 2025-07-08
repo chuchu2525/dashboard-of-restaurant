@@ -30,7 +30,14 @@ function getBucketKey(timestamp: string, granularity: '1min' | '15min' | 'hour')
     if (granularity === 'hour') {
         date.setMinutes(0);
     }
-    return date.toISOString();
+    // ローカルタイムゾーンでフォーマット
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    const hours = String(date.getHours()).padStart(2, '0');
+    const minutes = String(date.getMinutes()).padStart(2, '0');
+    const seconds = String(date.getSeconds()).padStart(2, '0');
+    return `${year}-${month}-${day}T${hours}:${minutes}:${seconds}`;
 }
 
 function aggregateTimeSeries(frames: ProcessedFrame[]): AggregatedTimeSeries {
@@ -143,10 +150,22 @@ function generateSeatUsageTimeline(allFrames: ProcessedFrame[]): SeatUsageBlock[
     const finalizeSession = (session: any) => {
         const duration = Math.round((session.lastSeenTime - session.startTime) / 60000); // in minutes
         if (duration > 0) {
+            // ローカルタイムゾーンでフォーマット
+            const formatLocalTime = (timestamp: number) => {
+                const date = new Date(timestamp);
+                const year = date.getFullYear();
+                const month = String(date.getMonth() + 1).padStart(2, '0');
+                const day = String(date.getDate()).padStart(2, '0');
+                const hours = String(date.getHours()).padStart(2, '0');
+                const minutes = String(date.getMinutes()).padStart(2, '0');
+                const seconds = String(date.getSeconds()).padStart(2, '0');
+                return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`;
+            };
+            
             usageBlocks.push({
                 seatId: session.seatId,
-                startTime: new Date(session.startTime).toISOString(),
-                endTime: new Date(session.lastSeenTime).toISOString(),
+                startTime: formatLocalTime(session.startTime),
+                endTime: formatLocalTime(session.lastSeenTime),
                 duration,
                 personCount: session.personCount,
                 personIds: session.personIds.split(','),

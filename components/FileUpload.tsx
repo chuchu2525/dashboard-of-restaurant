@@ -8,9 +8,15 @@ interface FileUploadProps {
 
 export const FileUpload: React.FC<FileUploadProps> = ({ onFileUploadSuccess, onFileUploadError }) => {
   const [dragging, setDragging] = useState(false);
-  const [startTime, setStartTime] = useState<string>('');
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [fileContent, setFileContent] = useState<string>('');
+  
+  // 時刻設定を分割
+  const now = new Date();
+  const [startDate, setStartDate] = useState<string>(now.toISOString().split('T')[0]);
+  const [startHour, setStartHour] = useState<string>(now.getHours().toString().padStart(2, '0'));
+  const [startMinute, setStartMinute] = useState<string>(now.getMinutes().toString().padStart(2, '0'));
+  const [startSecond, setStartSecond] = useState<string>('00');
 
   const resetState = useCallback(() => {
     setSelectedFile(null);
@@ -81,9 +87,15 @@ export const FileUpload: React.FC<FileUploadProps> = ({ onFileUploadSuccess, onF
     }
   }, [processFile, resetState]);
 
+  // 時刻を結合してstartTime文字列を生成
+  const getStartTimeString = () => {
+    return `${startDate}T${startHour}:${startMinute}:${startSecond}`;
+  };
+
   const handleSubmit = () => {
     if (selectedFile && fileContent) {
-      onFileUploadSuccess(fileContent, selectedFile.name, startTime);
+      const startTimeString = getStartTimeString();
+      onFileUploadSuccess(fileContent, selectedFile.name, startTimeString);
     } else {
       onFileUploadError('Please select a file first.');
     }
@@ -108,18 +120,69 @@ export const FileUpload: React.FC<FileUploadProps> = ({ onFileUploadSuccess, onF
       {selectedFile && <p className="mt-4 text-sm text-green-400">File ready: {selectedFile.name}</p>}
 
       <div className="w-full max-w-lg my-6">
-        <label htmlFor="start-time-upload" className="block text-sm font-medium text-slate-300 mb-2 text-center">
+        <label className="block text-sm font-medium text-slate-300 mb-3 text-center">
           Optional: Set Analysis Start Time
         </label>
-        <input 
-          type="datetime-local" 
-          id="start-time-upload"
-          value={startTime}
-          onChange={(e) => setStartTime(e.target.value)}
-          className="bg-slate-900 text-white border border-slate-600 rounded-md px-3 py-2 text-sm focus:ring-sky-500 focus:border-sky-500 w-full shadow-inner"
-          step="1"
-        />
-       </div>
+        
+        {/* 日付選択 */}
+        <div className="mb-3">
+          <label htmlFor="start-date" className="block text-xs text-slate-400 mb-1">Date</label>
+          <input 
+            type="date" 
+            id="start-date"
+            value={startDate}
+            onChange={(e) => setStartDate(e.target.value)}
+            className="bg-slate-900 text-white border border-slate-600 rounded-md px-3 py-2 text-sm focus:ring-sky-500 focus:border-sky-500 w-full shadow-inner"
+          />
+        </div>
+
+        {/* 時刻選択 */}
+        <div>
+          <label className="block text-xs text-slate-400 mb-1">Time</label>
+          <div className="flex items-center space-x-2">
+            <select 
+              value={startHour}
+              onChange={(e) => setStartHour(e.target.value)}
+              className="bg-slate-900 text-white border border-slate-600 rounded-md px-2 py-2 text-sm focus:ring-sky-500 focus:border-sky-500 shadow-inner"
+            >
+              {Array.from({ length: 24 }, (_, i) => (
+                <option key={i} value={i.toString().padStart(2, '0')}>
+                  {i.toString().padStart(2, '0')}
+                </option>
+              ))}
+            </select>
+            <span className="text-slate-400">:</span>
+            <select 
+              value={startMinute}
+              onChange={(e) => setStartMinute(e.target.value)}
+              className="bg-slate-900 text-white border border-slate-600 rounded-md px-2 py-2 text-sm focus:ring-sky-500 focus:border-sky-500 shadow-inner"
+            >
+              {Array.from({ length: 60 }, (_, i) => (
+                <option key={i} value={i.toString().padStart(2, '0')}>
+                  {i.toString().padStart(2, '0')}
+                </option>
+              ))}
+            </select>
+            <span className="text-slate-400">:</span>
+            <select 
+              value={startSecond}
+              onChange={(e) => setStartSecond(e.target.value)}
+              className="bg-slate-900 text-white border border-slate-600 rounded-md px-2 py-2 text-sm focus:ring-sky-500 focus:border-sky-500 shadow-inner"
+            >
+              {Array.from({ length: 60 }, (_, i) => (
+                <option key={i} value={i.toString().padStart(2, '0')}>
+                  {i.toString().padStart(2, '0')}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+
+        {/* 現在設定されている時刻の表示 */}
+        <div className="mt-2 text-xs text-slate-400 text-center">
+          Current setting: {getStartTimeString().replace('T', ' ')}
+        </div>
+      </div>
 
       <button
         onClick={handleSubmit}
@@ -133,4 +196,3 @@ export const FileUpload: React.FC<FileUploadProps> = ({ onFileUploadSuccess, onF
     </div>
   );
 };
-    
