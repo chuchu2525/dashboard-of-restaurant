@@ -340,7 +340,13 @@ function processData(data: RestaurantData): {
 
   allFrames.forEach(frame => {
       const frameTimestamp = new Date(frame.fullTimestamp).getTime();
-      const hourlyBucket = new Date(frame.fullTimestamp).toISOString().substring(0, 13); // YYYY-MM-DDTHH
+      const frameDate = new Date(frame.fullTimestamp);
+      // ローカルタイムゾーンで時間バケットを生成
+      const year = frameDate.getFullYear();
+      const month = String(frameDate.getMonth() + 1).padStart(2, '0');
+      const day = String(frameDate.getDate()).padStart(2, '0');
+      const hour = String(frameDate.getHours()).padStart(2, '0');
+      const hourlyBucket = `${year}-${month}-${day}T${hour}`;
 
       if (!arrivalTrend.has(hourlyBucket)) {
           arrivalTrend.set(hourlyBucket, { newVisitors: 0, newGroups: 0 });
@@ -426,26 +432,49 @@ self.onmessage = (e: MessageEvent<{ jsonString: string, startTime: string | null
         throw new Error("JSON data is empty or not an object.");
     }
 
-    let filteredData: RestaurantData = data;
+    let processedData: RestaurantData = data;
+    
     if (startTime) {
-        const startTimestamp = new Date(startTime).getTime();
-        if (!isNaN(startTimestamp)) {
-            filteredData = Object.entries(data).reduce((acc, [frameKey, detections]) => {
-                if (detections && detections.length > 0) {
-                    const frameTimestamp = new Date(detections[0].timestamp).getTime();
-                    if (!isNaN(frameTimestamp) && frameTimestamp >= startTimestamp) {
-                        acc[frameKey] = detections;
+        // datetime-local入力をローカルタイムゾーンとして正しく解釈
+        const newStartTimestamp = new Date(startTime).getTime();
+        if (!isNaN(newStartTimestamp)) {
+            // 元データの最初のタイムスタンプを取得
+            const firstFrameKey = Object.keys(data)[0];
+            const firstFrame = data[firstFrameKey];
+            if (firstFrame && firstFrame.length > 0) {
+                const originalStartTimestamp = new Date(firstFrame[0].timestamp).getTime();
+                const timeDifference = newStartTimestamp - originalStartTimestamp;
+                
+                // 全てのフレームのタイムスタンプを調整
+                processedData = Object.entries(data).reduce((acc, [frameKey, detections]) => {
+                    if (detections && detections.length > 0) {
+                        const adjustedDetections = detections.map(detection => {
+                            const adjustedTime = new Date(new Date(detection.timestamp).getTime() + timeDifference);
+                            // ローカルタイムゾーンでフォーマット（ISO形式ではなく）
+                            const year = adjustedTime.getFullYear();
+                            const month = String(adjustedTime.getMonth() + 1).padStart(2, '0');
+                            const day = String(adjustedTime.getDate()).padStart(2, '0');
+                            const hours = String(adjustedTime.getHours()).padStart(2, '0');
+                            const minutes = String(adjustedTime.getMinutes()).padStart(2, '0');
+                            const seconds = String(adjustedTime.getSeconds()).padStart(2, '0');
+                            
+                            return {
+                                ...detection,
+                                timestamp: `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`
+                            };
+                        });
+                        acc[frameKey] = adjustedDetections;
                     }
-                }
-                return acc;
-            }, {} as RestaurantData);
+                    return acc;
+                }, {} as RestaurantData);
+            }
         }
     }
 
 
-    const firstFrameKey = Object.keys(filteredData)[0];
+    const firstFrameKey = Object.keys(processedData)[0];
     if (firstFrameKey) {
-        const firstFrame = filteredData[firstFrameKey];
+        const firstFrame = processedData[firstFrameKey];
         if (!Array.isArray(firstFrame)) {
              throw new Error("JSON structure is not as expected. Should be { frameKey: [detections...] }.");
         }
@@ -459,9 +488,9 @@ self.onmessage = (e: MessageEvent<{ jsonString: string, startTime: string | null
     }
 
 
-    const result = processData(filteredData);
+    const result = processData(processedData);
     self.postMessage({ type: 'success', data: result });
   } catch (error) {
     self.postMessage({ type: 'error', error: error instanceof Error ? error.message : 'Unknown worker error' });
   }
-}; 
+};
