@@ -13,6 +13,7 @@ interface DashboardProps {
   interpolatedOccupancyData: TableOccupancyOverTimeDataPoint[];
   fileName: string;
   onClearData: () => void;
+  startTimeFilter: string;
 }
 
 const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884D8', '#82Ca9D', '#FF847C', '#E84A5F', '#2A363B'];
@@ -150,7 +151,7 @@ const getGroupColor = (personCount: number) => {
     return '#6b7280'; // Gray for unknown/0
 };
 
-export const Dashboard: React.FC<DashboardProps> = ({ processedFrames, summaryMetrics, arrivalTrendData, aggregatedTimeSeries, seatUsageTimeline, interpolatedOccupancyData, fileName, onClearData }) => {
+export const Dashboard: React.FC<DashboardProps> = ({ processedFrames, summaryMetrics, arrivalTrendData, aggregatedTimeSeries, seatUsageTimeline, interpolatedOccupancyData, fileName, onClearData, startTimeFilter }) => {
   const [aiSuggestions, setAiSuggestions] = useState<string | null>(null);
   const [isGeneratingSuggestions, setIsGeneratingSuggestions] = useState<boolean>(false);
   const [aiSuggestionsError, setAiSuggestionsError] = useState<string | null>(aiInitializationError); // Initialize with potential AI client error
@@ -333,14 +334,24 @@ Based on this data, here are your recommendations:
   return (
     <div className="space-y-8">
       <div className="flex flex-wrap justify-between items-center bg-slate-800 p-4 rounded-lg shadow-md gap-4">
-        <h2 className="text-xl sm:text-2xl font-semibold text-sky-400">Displaying data for: <span className="text-white">{fileName}</span></h2>
-        <button
-            onClick={onClearData}
-            className="bg-blue-600 hover:bg-blue-500 text-white font-bold py-2 px-6 rounded-lg transition duration-150 ease-in-out shadow-md hover:shadow-lg focus:outline-none focus:ring-2 focus:ring-blue-400 focus:ring-opacity-75"
-            aria-label="Load a new data file"
-        >
-            Load New File
-        </button>
+        <div>
+          <h2 className="text-xl sm:text-2xl font-semibold text-sky-400">Displaying data for: <span className="text-white">{fileName}</span></h2>
+          {startTimeFilter && (
+            <p className="text-xs text-amber-300 mt-1">
+              (Showing data from {new Date(startTimeFilter).toLocaleString()})
+            </p>
+          )}
+        </div>
+        
+        <div className="flex flex-wrap items-center gap-4">
+          <button
+              onClick={onClearData}
+              className="bg-blue-600 hover:bg-blue-500 text-white font-bold py-2 px-6 rounded-lg transition duration-150 ease-in-out shadow-md hover:shadow-lg focus:outline-none focus:ring-2 focus:ring-blue-400 focus:ring-opacity-75"
+              aria-label="Load a new data file"
+          >
+              Load New File
+          </button>
+        </div>
       </div>
 
       {/* --- Tab Selector --- */}

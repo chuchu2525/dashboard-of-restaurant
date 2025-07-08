@@ -259,7 +259,7 @@ function generateSeatUsageTimeline(allFrames: ProcessedFrame[]): SeatUsageBlock[
 // This function is the core processing logic, moved from App.tsx
 function processData(data: RestaurantData): { 
   processedFrames: ProcessedFrame[], 
-  summaryMetrics: SummaryMetrics, 
+  summaryMetrics: SummaryMetrics | null, 
   arrivalTrendData: ArrivalTrendDataPoint[],
   aggregatedTimeSeries: AggregatedTimeSeries,
   seatUsageTimeline: SeatUsageBlock[],
@@ -302,7 +302,14 @@ function processData(data: RestaurantData): {
     .sort((a, b) => new Date(a.fullTimestamp).getTime() - new Date(b.fullTimestamp).getTime());
 
   if (allFrames.length === 0) {
-    throw new Error("No valid data found in the file after processing.");
+    return {
+      processedFrames: [],
+      summaryMetrics: null,
+      arrivalTrendData: [],
+      aggregatedTimeSeries: { raw: [], '1min': [], '15min': [], 'hour': [] },
+      seatUsageTimeline: [],
+      interpolatedOccupancyData: [],
+    };
   }
   
   // --- Metric calculations use ALL frames to ensure accuracy ---
@@ -409,29 +416,50 @@ function processData(data: RestaurantData): {
   return { processedFrames, summaryMetrics, arrivalTrendData, aggregatedTimeSeries, seatUsageTimeline, interpolatedOccupancyData };
 }
 
-self.onmessage = (e: MessageEvent<string>) => {
+self.onmessage = (e: MessageEvent<{ jsonString: string, startTime: string | null }>) => {
   try {
-    const jsonString = e.data;
+    const { jsonString, startTime } = e.data;
     const data: RestaurantData = JSON.parse(jsonString);
 
     // Basic validation
     if (typeof data !== 'object' || data === null || Object.keys(data).length === 0) {
         throw new Error("JSON data is empty or not an object.");
     }
-    const firstFrameKey = Object.keys(data)[0];
-    const firstFrame = data[firstFrameKey];
-    if (!Array.isArray(firstFrame)) {
-         throw new Error("JSON structure is not as expected. Should be { frameKey: [detections...] }.");
-    }
-    // Deeper validation for the new format
-    if (firstFrame.length > 0) {
-        const firstDetection = firstFrame[0];
-        if (typeof firstDetection.person_id === 'undefined' || typeof firstDetection.timestamp === 'undefined') {
-            throw new Error("Detection object is missing required fields like 'person_id' or 'timestamp'.");
+
+    let filteredData: RestaurantData = data;
+    if (startTime) {
+        const startTimestamp = new Date(startTime).getTime();
+        if (!isNaN(startTimestamp)) {
+            filteredData = Object.entries(data).reduce((acc, [frameKey, detections]) => {
+                if (detections && detections.length > 0) {
+                    const frameTimestamp = new Date(detections[0].timestamp).getTime();
+                    if (!isNaN(frameTimestamp) && frameTimestamp >= startTimestamp) {
+                        acc[frameKey] = detections;
+                    }
+                }
+                return acc;
+            }, {} as RestaurantData);
         }
     }
 
-    const result = processData(data);
+
+    const firstFrameKey = Object.keys(filteredData)[0];
+    if (firstFrameKey) {
+        const firstFrame = filteredData[firstFrameKey];
+        if (!Array.isArray(firstFrame)) {
+             throw new Error("JSON structure is not as expected. Should be { frameKey: [detections...] }.");
+        }
+        // Deeper validation for the new format
+        if (firstFrame.length > 0) {
+            const firstDetection = firstFrame[0];
+            if (typeof firstDetection.person_id === 'undefined' || typeof firstDetection.timestamp === 'undefined') {
+                throw new Error("Detection object is missing required fields like 'person_id' or 'timestamp'.");
+            }
+        }
+    }
+
+
+    const result = processData(filteredData);
     self.postMessage({ type: 'success', data: result });
   } catch (error) {
     self.postMessage({ type: 'error', error: error instanceof Error ? error.message : 'Unknown worker error' });
