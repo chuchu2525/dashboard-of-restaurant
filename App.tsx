@@ -14,14 +14,17 @@ const App: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [hasData, setHasData] = useState<boolean>(false);
+  const [originalJson, setOriginalJson] = useState<string>('');
+  const [startTimeFilter, setStartTimeFilter] = useState<string>('');
 
 
-  const handleFileUpload = useCallback((jsonString: string, name: string) => {
+  const processDataWithWorker = useCallback((jsonString: string, startTime: string | null) => {
+    if (!jsonString) return;
+
     setIsLoading(true);
     setError(null);
-    setFileName(name);
+    setHasData(false);
 
-    // Vite-specific worker instantiation
     const worker = new Worker(new URL('./data.worker.ts', import.meta.url), {
       type: 'module',
     });
@@ -53,8 +56,15 @@ const App: React.FC = () => {
       worker.terminate();
     };
     
-    worker.postMessage(jsonString);
+    worker.postMessage({ jsonString, startTime });
   }, []);
+
+  const handleFileUpload = useCallback((jsonString: string, name: string, startTime: string) => {
+    setOriginalJson(jsonString);
+    setFileName(name);
+    setStartTimeFilter(startTime);
+    processDataWithWorker(jsonString, startTime || null);
+  }, [processDataWithWorker]);
 
   const handleFileError = useCallback((errMsg: string) => {
     setError(errMsg);
@@ -62,6 +72,7 @@ const App: React.FC = () => {
     setFileName('');
   }, []);
   
+
   const handleClearData = useCallback(() => {
     setProcessedFrames([]);
     setSummaryMetrics(null);
@@ -73,6 +84,8 @@ const App: React.FC = () => {
     setError(null);
     setIsLoading(false);
     setHasData(false);
+    setOriginalJson('');
+    setStartTimeFilter('');
   }, []);
 
   return (
@@ -106,17 +119,34 @@ const App: React.FC = () => {
             </button>
           </div>
         )}
-        {hasData && !error && !isLoading && processedFrames.length > 0 && summaryMetrics && (
-          <Dashboard 
-            processedFrames={processedFrames} 
-            summaryMetrics={summaryMetrics}
-            arrivalTrendData={arrivalTrend}
-            aggregatedTimeSeries={aggregatedTimeSeries}
-            seatUsageTimeline={seatUsageTimeline}
-            interpolatedOccupancyData={interpolatedOccupancyData}
-            fileName={fileName}
-            onClearData={handleClearData}
-          />
+        {hasData && !error && !isLoading && (
+          processedFrames.length > 0 && summaryMetrics ? (
+            <Dashboard 
+              processedFrames={processedFrames} 
+              summaryMetrics={summaryMetrics} 
+              arrivalTrendData={arrivalTrend}
+              aggregatedTimeSeries={aggregatedTimeSeries}
+              seatUsageTimeline={seatUsageTimeline}
+              interpolatedOccupancyData={interpolatedOccupancyData}
+              fileName={fileName}
+              onClearData={handleClearData}
+              startTimeFilter={startTimeFilter}
+            />
+          ) : (
+            <div className="max-w-xl mx-auto text-center p-8 bg-slate-800 rounded-lg shadow-xl">
+              <h3 className="text-xl font-semibold text-sky-300 mb-2">No Data to Display</h3>
+              <p className="text-slate-400">
+                There is no data available for the selected file and time range.
+                Please try clearing the start time filter or upload a different file.
+              </p>
+              <button 
+                onClick={handleClearData} 
+                className="mt-6 bg-blue-600 hover:bg-blue-500 text-white font-bold py-2 px-4 rounded transition duration-150"
+              >
+                Load New File
+              </button>
+            </div>
+          )
         )}
       </main>
       <footer className="text-center mt-12 text-slate-500 text-sm">

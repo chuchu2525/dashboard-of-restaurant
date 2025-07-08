@@ -13,6 +13,7 @@ interface DashboardProps {
   interpolatedOccupancyData: TableOccupancyOverTimeDataPoint[];
   fileName: string;
   onClearData: () => void;
+  startTimeFilter: string;
 }
 
 const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884D8', '#82Ca9D', '#FF847C', '#E84A5F', '#2A363B'];
@@ -150,11 +151,12 @@ const getGroupColor = (personCount: number) => {
     return '#6b7280'; // Gray for unknown/0
 };
 
-export const Dashboard: React.FC<DashboardProps> = ({ processedFrames, summaryMetrics, arrivalTrendData, aggregatedTimeSeries, seatUsageTimeline, interpolatedOccupancyData, fileName, onClearData }) => {
+export const Dashboard: React.FC<DashboardProps> = ({ processedFrames, summaryMetrics, arrivalTrendData, aggregatedTimeSeries, seatUsageTimeline, interpolatedOccupancyData, fileName, onClearData, startTimeFilter }) => {
   const [aiSuggestions, setAiSuggestions] = useState<string | null>(null);
   const [isGeneratingSuggestions, setIsGeneratingSuggestions] = useState<boolean>(false);
   const [aiSuggestionsError, setAiSuggestionsError] = useState<string | null>(aiInitializationError); // Initialize with potential AI client error
   const [timeSeriesGranularity, setTimeSeriesGranularity] = useState<TimeSeriesGranularity>('15min');
+  const [activeTab, setActiveTab] = useState<'summary' | 'realtime'>('summary');
 
   if (processedFrames.length === 0) {
     return <p className="text-center text-xl">No data to display.</p>;
@@ -332,90 +334,308 @@ Based on this data, here are your recommendations:
   return (
     <div className="space-y-8">
       <div className="flex flex-wrap justify-between items-center bg-slate-800 p-4 rounded-lg shadow-md gap-4">
-        <h2 className="text-xl sm:text-2xl font-semibold text-sky-400">Displaying data for: <span className="text-white">{fileName}</span></h2>
-        <button
-            onClick={onClearData}
-            className="bg-blue-600 hover:bg-blue-500 text-white font-bold py-2 px-6 rounded-lg transition duration-150 ease-in-out shadow-md hover:shadow-lg focus:outline-none focus:ring-2 focus:ring-blue-400 focus:ring-opacity-75"
-            aria-label="Load a new data file"
-        >
-            Load New File
-        </button>
-      </div>
-
-      {/* --- Visit Summary Section --- */}
-      <div className="bg-slate-800 p-6 rounded-xl shadow-2xl">
-        <h3 className="text-xl font-semibold mb-4 text-sky-300">Visit Summary & Trends</h3>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-6 mb-6">
-          <MetricCard title="Total Unique Groups" value={summaryMetrics.totalUniqueGroups.toLocaleString()} subtitle="Across the entire duration" />
-          <MetricCard title="Total Unique Visitors" value={summaryMetrics.totalUniqueVisitors.toLocaleString()} subtitle="Across the entire duration" />
-          <MetricCard title="Avg. Stay Time (per person)" value={`${summaryMetrics.averageStayTime.toLocaleString()} min`} subtitle="Across the entire duration" />
-          <MetricCard title="Peak Concurrent Visitors" value={`${summaryMetrics.peakOccupancyCount.toLocaleString()} `} subtitle={`at ${summaryMetrics.peakOccupancyTime}`} />
+        <div>
+          <h2 className="text-xl sm:text-2xl font-semibold text-sky-400">Displaying data for: <span className="text-white">{fileName}</span></h2>
+          {startTimeFilter && (
+            <p className="text-xs text-amber-300 mt-1">
+              (Showing data from {new Date(startTimeFilter).toLocaleString()})
+            </p>
+          )}
         </div>
         
-        {arrivalTrendData.length > 0 ? (
-          <ResponsiveContainer width="100%" height={300}>
-            <LineChart data={arrivalTrendData}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#4A5568" />
-              <XAxis dataKey="time" stroke="#90CDF4" tick={{ fontSize: 12 }} />
-              <YAxis yAxisId="left" stroke="#38BDF8" allowDecimals={false} />
-              <YAxis yAxisId="right" orientation="right" stroke="#34D399" allowDecimals={false} />
-              <Tooltip content={<CustomTooltip />} />
-              <Legend wrapperStyle={{color: "#E2E8F0"}}/>
-              <Line yAxisId="left" type="monotone" dataKey="newVisitors" name="New Visitors (per hour)" stroke="#38BDF8" strokeWidth={2} />
-              <Line yAxisId="right" type="monotone" dataKey="newGroups" name="New Groups (per hour)" stroke="#34D399" strokeWidth={2} />
-            </LineChart>
-          </ResponsiveContainer>
-        ) : (
-          <p className="text-slate-400 text-center py-10">No arrival trend data available.</p>
-        )}
+        <div className="flex flex-wrap items-center gap-4">
+          <button
+              onClick={onClearData}
+              className="bg-blue-600 hover:bg-blue-500 text-white font-bold py-2 px-6 rounded-lg transition duration-150 ease-in-out shadow-md hover:shadow-lg focus:outline-none focus:ring-2 focus:ring-blue-400 focus:ring-opacity-75"
+              aria-label="Load a new data file"
+          >
+              Load New File
+          </button>
+        </div>
       </div>
 
-      {/* --- Current Status Section --- */}
-      <h3 className="text-2xl font-bold text-center text-white -mb-4">Current & Real-time Snapshot</h3>
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-2 gap-6">
-        <MetricCard title="Current Customers" value={summaryMetrics.currentTotalCustomers.toLocaleString()} />
-        <MetricCard title="Occupied Tables (Now)" value={summaryMetrics.currentOccupiedTables.toLocaleString()} />
+      {/* --- Tab Selector --- */}
+      <div className="border-b border-slate-700">
+        <nav className="-mb-px flex justify-center space-x-8" aria-label="Tabs">
+          <button
+            onClick={() => setActiveTab('summary')}
+            className={`whitespace-nowrap py-4 px-1 border-b-2 font-medium text-lg transition-all ${
+              activeTab === 'summary'
+                ? 'border-sky-500 text-sky-400'
+                : 'border-transparent text-slate-400 hover:text-slate-200 hover:border-slate-500'
+            }`}
+          >
+            Overall Analysis
+          </button>
+          <button
+            onClick={() => setActiveTab('realtime')}
+            className={`whitespace-nowrap py-4 px-1 border-b-2 font-medium text-lg transition-all ${
+              activeTab === 'realtime'
+                ? 'border-sky-500 text-sky-400'
+                : 'border-transparent text-slate-400 hover:text-slate-200 hover:border-slate-500'
+            }`}
+          >
+            Latest Snapshot
+          </button>
+        </nav>
       </div>
 
-      {/* Summary Metrics */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        <MetricCard title="Current Customers" value={summaryMetrics.currentTotalCustomers.toLocaleString()} />
-        <MetricCard title="Occupied Tables (Now)" value={summaryMetrics.currentOccupiedTables.toLocaleString()} />
-        <MetricCard title="Avg. Group Size (Overall)" value={summaryMetrics.averageGroupSizeOverall.toLocaleString()} />
-      </div>
-
-      {/* Charts Row 1 */}
-      <div className="grid grid-cols-1 lg:grid-cols-1 gap-8">
+      {/* --- Summary / Overall Analysis Tab --- */}
+      <div className={activeTab === 'summary' ? 'space-y-8' : 'hidden'}>
+        {/* --- Visit Summary Section --- */}
         <div className="bg-slate-800 p-6 rounded-xl shadow-2xl">
-          <div className="flex flex-wrap justify-between items-center mb-4">
-            <h3 className="text-xl font-semibold text-sky-300">Total Customers Over Time</h3>
-            <div className="flex items-center space-x-2">
-              <span className="text-sm text-slate-400">Granularity:</span>
-              {(['raw', '1min', '15min', 'hour'] as TimeSeriesGranularity[]).map((gran) => (
-                <button
-                  key={gran}
-                  onClick={() => setTimeSeriesGranularity(gran)}
-                  className={`px-3 py-1 text-sm font-medium rounded-md transition-colors ${
-                    timeSeriesGranularity === gran
-                      ? 'bg-sky-600 text-white'
-                      : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
-                  }`}
-                >
-                  {gran}
-                </button>
-              ))}
-            </div>
+          <h3 className="text-xl font-semibold mb-4 text-sky-300">Visit Summary & Trends</h3>
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-6 mb-6">
+            <MetricCard title="Total Unique Groups" value={summaryMetrics.totalUniqueGroups.toLocaleString()} subtitle="Across the entire duration" />
+            <MetricCard title="Total Unique Visitors" value={summaryMetrics.totalUniqueVisitors.toLocaleString()} subtitle="Across the entire duration" />
+            <MetricCard title="Avg. Stay Time (per person)" value={`${summaryMetrics.averageStayTime.toLocaleString()} min`} subtitle="Across the entire duration" />
+            <MetricCard title="Peak Concurrent Visitors" value={`${summaryMetrics.peakOccupancyCount.toLocaleString()} `} subtitle={`at ${summaryMetrics.peakOccupancyTime}`} />
+            <MetricCard title="Avg. Group Size (Overall)" value={summaryMetrics.averageGroupSizeOverall.toLocaleString()} subtitle="Across all groups" />
           </div>
-          <ResponsiveContainer width="100%" height={300}>
-            <LineChart data={timeSeriesData}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#4A5568" />
-              <XAxis dataKey="time" stroke="#90CDF4" />
-              <YAxis stroke="#90CDF4" allowDecimals={false} />
-              <Tooltip content={<CustomTooltip />} />
-              <Legend wrapperStyle={{color: "#E2E8F0"}} />
-              <Line type="monotone" dataKey="totalPersons" name="Total Customers" stroke="#38BDF8" strokeWidth={2} dot={timeSeriesData.length < 100 ? { r: 4, fill: '#38BDF8' } : false} activeDot={{ r: 6 }} />
-            </LineChart>
-          </ResponsiveContainer>
+          
+          {arrivalTrendData.length > 0 ? (
+            <ResponsiveContainer width="100%" height={300}>
+              <LineChart data={arrivalTrendData}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#4A5568" />
+                <XAxis dataKey="time" stroke="#90CDF4" tick={{ fontSize: 12 }} />
+                <YAxis yAxisId="left" stroke="#38BDF8" allowDecimals={false} />
+                <YAxis yAxisId="right" orientation="right" stroke="#34D399" allowDecimals={false} />
+                <Tooltip content={<CustomTooltip />} />
+                <Legend wrapperStyle={{color: "#E2E8F0"}}/>
+                <Line yAxisId="left" type="monotone" dataKey="newVisitors" name="New Visitors (per hour)" stroke="#38BDF8" strokeWidth={2} />
+                <Line yAxisId="right" type="monotone" dataKey="newGroups" name="New Groups (per hour)" stroke="#34D399" strokeWidth={2} />
+              </LineChart>
+            </ResponsiveContainer>
+          ) : (
+            <p className="text-slate-400 text-center py-10">No arrival trend data available.</p>
+          )}
+        </div>
+
+        {/* Charts Row 1 */}
+        <div className="grid grid-cols-1 lg:grid-cols-1 gap-8">
+          <div className="bg-slate-800 p-6 rounded-xl shadow-2xl">
+            <div className="flex flex-wrap justify-between items-center mb-4">
+              <h3 className="text-xl font-semibold text-sky-300">Total Customers Over Time</h3>
+              <div className="flex items-center space-x-2">
+                <span className="text-sm text-slate-400">Granularity:</span>
+                {(['raw', '1min', '15min', 'hour'] as TimeSeriesGranularity[]).map((gran) => (
+                  <button
+                    key={gran}
+                    onClick={() => setTimeSeriesGranularity(gran)}
+                    className={`px-3 py-1 text-sm font-medium rounded-md transition-colors ${
+                      timeSeriesGranularity === gran
+                        ? 'bg-sky-600 text-white'
+                        : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
+                    }`}
+                  >
+                    {gran}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <ResponsiveContainer width="100%" height={300}>
+              <LineChart data={timeSeriesData}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#4A5568" />
+                <XAxis dataKey="time" stroke="#90CDF4" />
+                <YAxis stroke="#90CDF4" allowDecimals={false} />
+                <Tooltip content={<CustomTooltip />} />
+                <Legend wrapperStyle={{color: "#E2E8F0"}} />
+                <Line type="monotone" dataKey="totalPersons" name="Total Customers" stroke="#38BDF8" strokeWidth={2} dot={timeSeriesData.length < 100 ? { r: 4, fill: '#38BDF8' } : false} activeDot={{ r: 6 }} />
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
+
+        </div>
+        
+        <div className="grid grid-cols-1 lg:grid-cols-1 gap-8">
+          <div className="bg-slate-800 p-6 rounded-xl shadow-2xl">
+            <h3 className="text-xl font-semibold mb-4 text-sky-300">Group Size Distribution (Overall)</h3>
+            {groupSizeDistributionData.length > 0 ? (
+            <ResponsiveContainer width="100%" height={300}>
+              <BarChart data={groupSizeDistributionData} layout="vertical">
+                <CartesianGrid strokeDasharray="3 3" stroke="#4A5568" />
+                <XAxis type="number" stroke="#90CDF4" allowDecimals={false} />
+                <YAxis type="category" dataKey="groupSize" stroke="#90CDF4" width={100} interval={0}/>
+                <Tooltip content={<CustomTooltip />} />
+                <Legend wrapperStyle={{color: "#E2E8F0"}}/>
+                <Bar dataKey="frequency" name="Number of Groups" fill="#A78BFA" radius={[0, 4, 4, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+            ) : (
+               <p className="text-slate-400 text-center py-10">No group data available overall.</p>
+            )}
+          </div>
+        </div>
+
+        <div className="bg-slate-800 p-6 rounded-xl shadow-2xl">
+          <h3 className="text-xl font-semibold mb-4 text-sky-300">Table Occupancy Over Time</h3>
+          {tableOccupancyOverTimeData.length > 0 && allSeatIds.length > 0 ? (
+            <ResponsiveContainer width="100%" height={400}>
+              <LineChart data={tableOccupancyOverTimeData}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#4A5568" />
+                <XAxis dataKey="time" stroke="#90CDF4" />
+                <YAxis stroke="#90CDF4" allowDecimals={false} />
+                <Tooltip content={<CustomTooltip />} />
+                <Legend wrapperStyle={{color: "#E2E8F0"}} />
+                {allSeatIds.map((seatId, index) => (
+                  <Line
+                    key={seatId}
+                    type="monotone"
+                    dataKey={seatId}
+                    name={seatId}
+                    stroke={COLORS[index % COLORS.length]}
+                    strokeWidth={2}
+                    dot={{ r: 2 }}
+                    activeDot={{ r: 5 }}
+                  />
+                ))}
+              </LineChart>
+            </ResponsiveContainer>
+          ) : (
+            <p className="text-slate-400 text-center py-10">No table occupancy data available to display trends.</p>
+          )}
+        </div>
+
+        <div className="bg-slate-800 p-6 rounded-xl shadow-2xl">
+          <h3 className="text-xl font-semibold mb-2 text-sky-300">Interpreted Table Occupancy (with absence tolerance)</h3>
+          <p className="text-xs text-slate-400 mb-4 -mt-1">This chart shows continuous table usage, smoothing over short breaks (up to 5 mins) to reflect actual session durations.</p>
+          {interpolatedOccupancyData.length > 0 && allSeatIds.length > 0 ? (
+            <ResponsiveContainer width="100%" height={400}>
+              <LineChart data={interpolatedOccupancyData}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#4A5568" />
+                <XAxis dataKey="time" stroke="#90CDF4" />
+                <YAxis stroke="#90CDF4" allowDecimals={false} />
+                <Tooltip content={<CustomTooltip />} />
+                <Legend wrapperStyle={{color: "#E2E8F0"}} />
+                {allSeatIds.map((seatId, index) => (
+                  <Line
+                    key={seatId}
+                    type="monotone"
+                    dataKey={seatId}
+                    name={seatId}
+                    stroke={COLORS[index % COLORS.length]}
+                    strokeWidth={2}
+                    dot={{ r: 2 }}
+                    activeDot={{ r: 5 }}
+                  />
+                ))}
+              </LineChart>
+            </ResponsiveContainer>
+          ) : (
+            <p className="text-slate-400 text-center py-10">No interpreted table occupancy data available.</p>
+          )}
+        </div>
+
+        {/* Seat Usage Timeline Section */}
+        <div className="bg-slate-800 p-6 rounded-xl shadow-2xl">
+          <h3 className="text-xl font-semibold mb-4 text-sky-300">Seat Usage Timeline (Gantt View)</h3>
+          {ganttChartData.length > 0 ? (
+            <>
+              <ResponsiveContainer width="100%" height={ganttChartData.length * 60 + 50}>
+                <BarChart
+                  data={ganttChartData}
+                  layout="vertical"
+                  margin={{ top: 5, right: 30, left: 100, bottom: 5 }}
+                  barCategoryGap="30%"
+                >
+                  <CartesianGrid strokeDasharray="3 3" stroke="#4A5568" />
+                  <XAxis 
+                    type="number" 
+                    stroke="#90CDF4" 
+                    domain={[0, 'dataMax']}
+                    label={{ value: 'Duration (minutes)', position: 'bottom', fill: '#90CDF4', dy: 10 }}
+                  />
+                  <YAxis 
+                    type="category" 
+                    dataKey="seatId" 
+                    stroke="#90CDF4" 
+                    width={80}
+                    tickFormatter={(value) => value.charAt(0).toUpperCase() + value.slice(1)}
+                  />
+                  <Tooltip content={<GanttTooltip />} cursor={{ fill: 'rgba(100, 116, 139, 0.2)' }}/>
+                  
+                  {Array.from({ length: maxBlocks }).map((_, i) => (
+                    <Bar 
+                      key={i}
+                      dataKey={`block_${i}_duration`} 
+                      stackId="a" 
+                      name={`Visit ${i+1}`}
+                      isAnimationActive={false}
+                    >
+                      {ganttChartData.map((entry, cellIndex) => {
+                        const block = entry[`block_${i}_details`];
+                        return (
+                          <Cell 
+                            key={`cell-${cellIndex}`} 
+                            fill={block ? getGroupColor(block.personCount) : 'transparent'} 
+                          />
+                        );
+                      })}
+                    </Bar>
+                  ))}
+                </BarChart>
+              </ResponsiveContainer>
+              <CustomGanttLegend />
+            </>
+          ) : (
+            <p className="text-slate-400 text-center py-10">No seat usage data available to display timeline.</p>
+          )}
+        </div>
+
+        {/* AI Suggestions Section */}
+        <div className="bg-slate-800 p-6 rounded-xl shadow-2xl">
+          <h3 className="text-xl font-semibold mb-4 text-sky-300">AI-Powered Suggestions</h3>
+          {!ai && aiInitializationError && (
+             <div className="bg-yellow-800 border border-yellow-700 text-yellow-100 px-4 py-3 rounded relative" role="alert">
+              <strong className="font-bold">AI Feature Notice: </strong>
+              <span className="block sm:inline">{aiInitializationError}</span>
+            </div>
+          )}
+          {ai && (
+              <>
+              <button
+                  onClick={handleGenerateSuggestions}
+                  disabled={isGeneratingSuggestions || !ai}
+                  className="bg-teal-600 hover:bg-teal-500 disabled:bg-slate-600 text-white font-bold py-2 px-6 rounded-lg transition duration-150 ease-in-out shadow-md hover:shadow-lg focus:outline-none focus:ring-2 focus:ring-teal-400 focus:ring-opacity-75 disabled:cursor-not-allowed mb-4"
+                  aria-live="polite"
+                  aria-label={isGeneratingSuggestions ? "Generating AI suggestions..." : "Get AI-powered suggestions for your restaurant"}
+              >
+                  {isGeneratingSuggestions ? (
+                  <>
+                      <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white inline" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                      </svg>
+                      Generating...
+                  </>
+                  ) : "Get AI Suggestions"}
+              </button>
+
+              {aiSuggestionsError && !isGeneratingSuggestions && (
+                  <div className="bg-red-700 border border-red-600 text-white px-4 py-3 rounded relative mt-4" role="alert">
+                  <strong className="font-bold">Error: </strong>
+                  <span className="block sm:inline">{aiSuggestionsError}</span>
+                  </div>
+              )}
+
+              {aiSuggestions && !isGeneratingSuggestions && !aiSuggestionsError && (
+                  <div className="mt-4 p-4 bg-slate-700 rounded-lg max-h-96 overflow-y-auto">
+                   {formatAiSuggestions(aiSuggestions)}
+                  </div>
+              )}
+              {!aiSuggestions && !isGeneratingSuggestions && !aiSuggestionsError && (
+                  <p className="text-slate-400 mt-4">Click the button above to generate AI-driven insights and suggestions based on your data.</p>
+              )}
+              </>
+          )}
+        </div>
+      </div>
+      
+      {/* --- Real-time / Latest Snapshot Tab --- */}
+      <div className={activeTab === 'realtime' ? 'space-y-8' : 'hidden'}>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <MetricCard title="Current Customers" value={summaryMetrics.currentTotalCustomers.toLocaleString()} />
+          <MetricCard title="Occupied Tables (Now)" value={summaryMetrics.currentOccupiedTables.toLocaleString()} />
         </div>
 
         <div className="bg-slate-800 p-6 rounded-xl shadow-2xl">
@@ -431,9 +651,7 @@ Based on this data, here are your recommendations:
             </BarChart>
           </ResponsiveContainer>
         </div>
-      </div>
-      
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+
         <div className="bg-slate-800 p-6 rounded-xl shadow-2xl">
             <h3 className="text-xl font-semibold mb-4 text-sky-300">Group Size Distribution (Latest Frame at {latestFrame.time})</h3>
             {latestFrameGroupSizeDistribution.length > 0 ? (
@@ -462,187 +680,6 @@ Based on this data, here are your recommendations:
                 <p className="text-slate-400 text-center py-10">No group data for the latest frame.</p>
             )}
         </div>
-
-        <div className="bg-slate-800 p-6 rounded-xl shadow-2xl">
-          <h3 className="text-xl font-semibold mb-4 text-sky-300">Group Size Distribution (Overall)</h3>
-          {groupSizeDistributionData.length > 0 ? (
-          <ResponsiveContainer width="100%" height={300}>
-            <BarChart data={groupSizeDistributionData} layout="vertical">
-              <CartesianGrid strokeDasharray="3 3" stroke="#4A5568" />
-              <XAxis type="number" stroke="#90CDF4" allowDecimals={false} />
-              <YAxis type="category" dataKey="groupSize" stroke="#90CDF4" width={100} interval={0}/>
-              <Tooltip content={<CustomTooltip />} />
-              <Legend wrapperStyle={{color: "#E2E8F0"}}/>
-              <Bar dataKey="frequency" name="Number of Groups" fill="#A78BFA" radius={[0, 4, 4, 0]} />
-            </BarChart>
-          </ResponsiveContainer>
-          ) : (
-             <p className="text-slate-400 text-center py-10">No group data available overall.</p>
-          )}
-        </div>
-      </div>
-
-      <div className="bg-slate-800 p-6 rounded-xl shadow-2xl">
-        <h3 className="text-xl font-semibold mb-4 text-sky-300">Table Occupancy Over Time</h3>
-        {tableOccupancyOverTimeData.length > 0 && allSeatIds.length > 0 ? (
-          <ResponsiveContainer width="100%" height={400}>
-            <LineChart data={tableOccupancyOverTimeData}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#4A5568" />
-              <XAxis dataKey="time" stroke="#90CDF4" />
-              <YAxis stroke="#90CDF4" allowDecimals={false} />
-              <Tooltip content={<CustomTooltip />} />
-              <Legend wrapperStyle={{color: "#E2E8F0"}} />
-              {allSeatIds.map((seatId, index) => (
-                <Line
-                  key={seatId}
-                  type="monotone"
-                  dataKey={seatId}
-                  name={seatId}
-                  stroke={COLORS[index % COLORS.length]}
-                  strokeWidth={2}
-                  dot={{ r: 2 }}
-                  activeDot={{ r: 5 }}
-                />
-              ))}
-            </LineChart>
-          </ResponsiveContainer>
-        ) : (
-          <p className="text-slate-400 text-center py-10">No table occupancy data available to display trends.</p>
-        )}
-      </div>
-
-      <div className="bg-slate-800 p-6 rounded-xl shadow-2xl">
-        <h3 className="text-xl font-semibold mb-2 text-sky-300">Interpreted Table Occupancy (with absence tolerance)</h3>
-        <p className="text-xs text-slate-400 mb-4 -mt-1">This chart shows continuous table usage, smoothing over short breaks (up to 5 mins) to reflect actual session durations.</p>
-        {interpolatedOccupancyData.length > 0 && allSeatIds.length > 0 ? (
-          <ResponsiveContainer width="100%" height={400}>
-            <LineChart data={interpolatedOccupancyData}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#4A5568" />
-              <XAxis dataKey="time" stroke="#90CDF4" />
-              <YAxis stroke="#90CDF4" allowDecimals={false} />
-              <Tooltip content={<CustomTooltip />} />
-              <Legend wrapperStyle={{color: "#E2E8F0"}} />
-              {allSeatIds.map((seatId, index) => (
-                <Line
-                  key={seatId}
-                  type="monotone"
-                  dataKey={seatId}
-                  name={seatId}
-                  stroke={COLORS[index % COLORS.length]}
-                  strokeWidth={2}
-                  dot={{ r: 2 }}
-                  activeDot={{ r: 5 }}
-                />
-              ))}
-            </LineChart>
-          </ResponsiveContainer>
-        ) : (
-          <p className="text-slate-400 text-center py-10">No interpreted table occupancy data available.</p>
-        )}
-      </div>
-
-      {/* Seat Usage Timeline Section */}
-      <div className="bg-slate-800 p-6 rounded-xl shadow-2xl">
-        <h3 className="text-xl font-semibold mb-4 text-sky-300">Seat Usage Timeline (Gantt View)</h3>
-        {ganttChartData.length > 0 ? (
-          <>
-            <ResponsiveContainer width="100%" height={ganttChartData.length * 60 + 50}>
-              <BarChart
-                data={ganttChartData}
-                layout="vertical"
-                margin={{ top: 5, right: 30, left: 100, bottom: 5 }}
-                barCategoryGap="30%"
-              >
-                <CartesianGrid strokeDasharray="3 3" stroke="#4A5568" />
-                <XAxis 
-                  type="number" 
-                  stroke="#90CDF4" 
-                  domain={[0, 'dataMax']}
-                  label={{ value: 'Duration (minutes)', position: 'bottom', fill: '#90CDF4', dy: 10 }}
-                />
-                <YAxis 
-                  type="category" 
-                  dataKey="seatId" 
-                  stroke="#90CDF4" 
-                  width={80}
-                  tickFormatter={(value) => value.charAt(0).toUpperCase() + value.slice(1)}
-                />
-                <Tooltip content={<GanttTooltip />} cursor={{ fill: 'rgba(100, 116, 139, 0.2)' }}/>
-                
-                {Array.from({ length: maxBlocks }).map((_, i) => (
-                  <Bar 
-                    key={i}
-                    dataKey={`block_${i}_duration`} 
-                    stackId="a" 
-                    name={`Visit ${i+1}`}
-                    isAnimationActive={false}
-                  >
-                    {ganttChartData.map((entry, cellIndex) => {
-                      const block = entry[`block_${i}_details`];
-                      return (
-                        <Cell 
-                          key={`cell-${cellIndex}`} 
-                          fill={block ? getGroupColor(block.personCount) : 'transparent'} 
-                        />
-                      );
-                    })}
-                  </Bar>
-                ))}
-              </BarChart>
-            </ResponsiveContainer>
-            <CustomGanttLegend />
-          </>
-        ) : (
-          <p className="text-slate-400 text-center py-10">No seat usage data available to display timeline.</p>
-        )}
-      </div>
-
-      {/* AI Suggestions Section */}
-      <div className="bg-slate-800 p-6 rounded-xl shadow-2xl">
-        <h3 className="text-xl font-semibold mb-4 text-sky-300">AI-Powered Suggestions</h3>
-        {!ai && aiInitializationError && (
-           <div className="bg-yellow-800 border border-yellow-700 text-yellow-100 px-4 py-3 rounded relative" role="alert">
-            <strong className="font-bold">AI Feature Notice: </strong>
-            <span className="block sm:inline">{aiInitializationError}</span>
-          </div>
-        )}
-        {ai && (
-            <>
-            <button
-                onClick={handleGenerateSuggestions}
-                disabled={isGeneratingSuggestions || !ai}
-                className="bg-teal-600 hover:bg-teal-500 disabled:bg-slate-600 text-white font-bold py-2 px-6 rounded-lg transition duration-150 ease-in-out shadow-md hover:shadow-lg focus:outline-none focus:ring-2 focus:ring-teal-400 focus:ring-opacity-75 disabled:cursor-not-allowed mb-4"
-                aria-live="polite"
-                aria-label={isGeneratingSuggestions ? "Generating AI suggestions..." : "Get AI-powered suggestions for your restaurant"}
-            >
-                {isGeneratingSuggestions ? (
-                <>
-                    <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white inline" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                    </svg>
-                    Generating...
-                </>
-                ) : "Get AI Suggestions"}
-            </button>
-
-            {aiSuggestionsError && !isGeneratingSuggestions && (
-                <div className="bg-red-700 border border-red-600 text-white px-4 py-3 rounded relative mt-4" role="alert">
-                <strong className="font-bold">Error: </strong>
-                <span className="block sm:inline">{aiSuggestionsError}</span>
-                </div>
-            )}
-
-            {aiSuggestions && !isGeneratingSuggestions && !aiSuggestionsError && (
-                <div className="mt-4 p-4 bg-slate-700 rounded-lg max-h-96 overflow-y-auto">
-                 {formatAiSuggestions(aiSuggestions)}
-                </div>
-            )}
-            {!aiSuggestions && !isGeneratingSuggestions && !aiSuggestionsError && (
-                <p className="text-slate-400 mt-4">Click the button above to generate AI-driven insights and suggestions based on your data.</p>
-            )}
-            </>
-        )}
       </div>
 
     </div>

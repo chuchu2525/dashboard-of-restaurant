@@ -30,7 +30,14 @@ function getBucketKey(timestamp: string, granularity: '1min' | '15min' | 'hour')
     if (granularity === 'hour') {
         date.setMinutes(0);
     }
-    return date.toISOString();
+    // ローカルタイムゾーンでフォーマット
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    const hours = String(date.getHours()).padStart(2, '0');
+    const minutes = String(date.getMinutes()).padStart(2, '0');
+    const seconds = String(date.getSeconds()).padStart(2, '0');
+    return `${year}-${month}-${day}T${hours}:${minutes}:${seconds}`;
 }
 
 function aggregateTimeSeries(frames: ProcessedFrame[]): AggregatedTimeSeries {
@@ -143,10 +150,22 @@ function generateSeatUsageTimeline(allFrames: ProcessedFrame[]): SeatUsageBlock[
     const finalizeSession = (session: any) => {
         const duration = Math.round((session.lastSeenTime - session.startTime) / 60000); // in minutes
         if (duration > 0) {
+            // ローカルタイムゾーンでフォーマット
+            const formatLocalTime = (timestamp: number) => {
+                const date = new Date(timestamp);
+                const year = date.getFullYear();
+                const month = String(date.getMonth() + 1).padStart(2, '0');
+                const day = String(date.getDate()).padStart(2, '0');
+                const hours = String(date.getHours()).padStart(2, '0');
+                const minutes = String(date.getMinutes()).padStart(2, '0');
+                const seconds = String(date.getSeconds()).padStart(2, '0');
+                return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`;
+            };
+            
             usageBlocks.push({
                 seatId: session.seatId,
-                startTime: new Date(session.startTime).toISOString(),
-                endTime: new Date(session.lastSeenTime).toISOString(),
+                startTime: formatLocalTime(session.startTime),
+                endTime: formatLocalTime(session.lastSeenTime),
                 duration,
                 personCount: session.personCount,
                 personIds: session.personIds.split(','),
@@ -259,7 +278,7 @@ function generateSeatUsageTimeline(allFrames: ProcessedFrame[]): SeatUsageBlock[
 // This function is the core processing logic, moved from App.tsx
 function processData(data: RestaurantData): { 
   processedFrames: ProcessedFrame[], 
-  summaryMetrics: SummaryMetrics, 
+  summaryMetrics: SummaryMetrics | null, 
   arrivalTrendData: ArrivalTrendDataPoint[],
   aggregatedTimeSeries: AggregatedTimeSeries,
   seatUsageTimeline: SeatUsageBlock[],
@@ -302,7 +321,14 @@ function processData(data: RestaurantData): {
     .sort((a, b) => new Date(a.fullTimestamp).getTime() - new Date(b.fullTimestamp).getTime());
 
   if (allFrames.length === 0) {
-    throw new Error("No valid data found in the file after processing.");
+    return {
+      processedFrames: [],
+      summaryMetrics: null,
+      arrivalTrendData: [],
+      aggregatedTimeSeries: { raw: [], '1min': [], '15min': [], 'hour': [] },
+      seatUsageTimeline: [],
+      interpolatedOccupancyData: [],
+    };
   }
   
   // --- Metric calculations use ALL frames to ensure accuracy ---
@@ -333,7 +359,13 @@ function processData(data: RestaurantData): {
 
   allFrames.forEach(frame => {
       const frameTimestamp = new Date(frame.fullTimestamp).getTime();
-      const hourlyBucket = new Date(frame.fullTimestamp).toISOString().substring(0, 13); // YYYY-MM-DDTHH
+      const frameDate = new Date(frame.fullTimestamp);
+      // ローカルタイムゾーンで時間バケットを生成
+      const year = frameDate.getFullYear();
+      const month = String(frameDate.getMonth() + 1).padStart(2, '0');
+      const day = String(frameDate.getDate()).padStart(2, '0');
+      const hour = String(frameDate.getHours()).padStart(2, '0');
+      const hourlyBucket = `${year}-${month}-${day}T${hour}`;
 
       if (!arrivalTrend.has(hourlyBucket)) {
           arrivalTrend.set(hourlyBucket, { newVisitors: 0, newGroups: 0 });
@@ -409,31 +441,75 @@ function processData(data: RestaurantData): {
   return { processedFrames, summaryMetrics, arrivalTrendData, aggregatedTimeSeries, seatUsageTimeline, interpolatedOccupancyData };
 }
 
-self.onmessage = (e: MessageEvent<string>) => {
+self.onmessage = (e: MessageEvent<{ jsonString: string, startTime: string | null }>) => {
   try {
-    const jsonString = e.data;
+    const { jsonString, startTime } = e.data;
     const data: RestaurantData = JSON.parse(jsonString);
 
     // Basic validation
     if (typeof data !== 'object' || data === null || Object.keys(data).length === 0) {
         throw new Error("JSON data is empty or not an object.");
     }
-    const firstFrameKey = Object.keys(data)[0];
-    const firstFrame = data[firstFrameKey];
-    if (!Array.isArray(firstFrame)) {
-         throw new Error("JSON structure is not as expected. Should be { frameKey: [detections...] }.");
-    }
-    // Deeper validation for the new format
-    if (firstFrame.length > 0) {
-        const firstDetection = firstFrame[0];
-        if (typeof firstDetection.person_id === 'undefined' || typeof firstDetection.timestamp === 'undefined') {
-            throw new Error("Detection object is missing required fields like 'person_id' or 'timestamp'.");
+
+    let processedData: RestaurantData = data;
+    
+    if (startTime) {
+        // datetime-local入力をローカルタイムゾーンとして正しく解釈
+        const newStartTimestamp = new Date(startTime).getTime();
+        if (!isNaN(newStartTimestamp)) {
+            // 元データの最初のタイムスタンプを取得
+            const firstFrameKey = Object.keys(data)[0];
+            const firstFrame = data[firstFrameKey];
+            if (firstFrame && firstFrame.length > 0) {
+                const originalStartTimestamp = new Date(firstFrame[0].timestamp).getTime();
+                const timeDifference = newStartTimestamp - originalStartTimestamp;
+                
+                // 全てのフレームのタイムスタンプを調整
+                processedData = Object.entries(data).reduce((acc, [frameKey, detections]) => {
+                    if (detections && detections.length > 0) {
+                        const adjustedDetections = detections.map(detection => {
+                            const adjustedTime = new Date(new Date(detection.timestamp).getTime() + timeDifference);
+                            // ローカルタイムゾーンでフォーマット（ISO形式ではなく）
+                            const year = adjustedTime.getFullYear();
+                            const month = String(adjustedTime.getMonth() + 1).padStart(2, '0');
+                            const day = String(adjustedTime.getDate()).padStart(2, '0');
+                            const hours = String(adjustedTime.getHours()).padStart(2, '0');
+                            const minutes = String(adjustedTime.getMinutes()).padStart(2, '0');
+                            const seconds = String(adjustedTime.getSeconds()).padStart(2, '0');
+                            
+                            return {
+                                ...detection,
+                                timestamp: `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`
+                            };
+                        });
+                        acc[frameKey] = adjustedDetections;
+                    }
+                    return acc;
+                }, {} as RestaurantData);
+            }
         }
     }
 
-    const result = processData(data);
+
+    const firstFrameKey = Object.keys(processedData)[0];
+    if (firstFrameKey) {
+        const firstFrame = processedData[firstFrameKey];
+        if (!Array.isArray(firstFrame)) {
+             throw new Error("JSON structure is not as expected. Should be { frameKey: [detections...] }.");
+        }
+        // Deeper validation for the new format
+        if (firstFrame.length > 0) {
+            const firstDetection = firstFrame[0];
+            if (typeof firstDetection.person_id === 'undefined' || typeof firstDetection.timestamp === 'undefined') {
+                throw new Error("Detection object is missing required fields like 'person_id' or 'timestamp'.");
+            }
+        }
+    }
+
+
+    const result = processData(processedData);
     self.postMessage({ type: 'success', data: result });
   } catch (error) {
     self.postMessage({ type: 'error', error: error instanceof Error ? error.message : 'Unknown worker error' });
   }
-}; 
+};
