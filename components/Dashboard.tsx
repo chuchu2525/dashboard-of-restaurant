@@ -2,7 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { ProcessedFrame, SummaryMetrics, TimeSeriesDataPoint, SeatOccupancyDataPoint, GroupSizeDistributionDataPoint, TableOccupancyOverTimeDataPoint, ArrivalTrendDataPoint, AggregatedTimeSeries, TimeSeriesGranularity, SeatUsageBlock } from '../types';
 import { ResponsiveContainer, LineChart, Line, BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend } from 'recharts';
 import { MetricCard } from './MetricCard';
-import { GoogleGenAI, GenerateContentResponse } from "@google/genai";
+import { createAIProvider, getProviderInfo } from '../aiFactory';
 
 interface DashboardProps {
   processedFrames: ProcessedFrame[];
@@ -18,26 +18,9 @@ interface DashboardProps {
 
 const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884D8', '#82Ca9D', '#FF847C', '#E84A5F', '#2A363B'];
 
-// Attempt to initialize GoogleGenAI client
-// API_KEY is expected to be in process.env set by the execution environment
-let ai: GoogleGenAI | null = null;
-let aiInitializationError: string | null = null;
-try {
-  // IMPORTANT: process.env.API_KEY is an environment variable. 
-  // It should NOT be hardcoded here or exposed to the client-side directly if this were a typical web app.
-  // For this specific environment, we assume process.env.API_KEY is securely available.
-  const apiKey = process.env.API_KEY;
-  if (apiKey) {
-    ai = new GoogleGenAI({ apiKey });
-  } else {
-    aiInitializationError = "API_KEY environment variable not set. AI features will be disabled.";
-    console.warn(aiInitializationError);
-  }
-} catch (e) {
-  aiInitializationError = `Failed to initialize GoogleGenAI: ${e instanceof Error ? e.message : String(e)}`;
-  console.error(aiInitializationError);
-  ai = null; 
-}
+// Initialize AI Provider using the new system
+const { provider: ai, error: aiInitializationError } = createAIProvider();
+const providerInfo = getProviderInfo();
 
 
 const CustomTooltip = ({ active, payload, label }: any) => {
@@ -316,15 +299,12 @@ Based on this data, here are your recommendations:
     `;
 
     try {
-      const response: GenerateContentResponse = await ai.models.generateContent({
-        model: 'gemini-2.5-flash-preview-04-17',
-        contents: prompt,
-      });
-      setAiSuggestions(response.text ?? null);
+      const response = await ai.generateSuggestions(prompt);
+      setAiSuggestions(response || null);
     } catch (error) {
       console.error("Error generating AI suggestions:", error);
       const errorMessage = error instanceof Error ? error.message : "An unknown error occurred while fetching suggestions.";
-      setAiSuggestionsError(`Failed to get suggestions from AI: ${errorMessage}`);
+      setAiSuggestionsError(`Failed to get suggestions from AI (${providerInfo.name}): ${errorMessage}`);
     } finally {
       setIsGeneratingSuggestions(false);
     }
