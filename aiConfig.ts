@@ -23,7 +23,7 @@ export const AI_CONFIG = {
   
   anthropic: {
     apiKey: (import.meta as any).env?.VITE_ANTHROPIC_API_KEY,
-    model: 'claude-3-5-sonnet-latest'
+    model: 'claude-sonnet-4-5'
   }
 };
 
