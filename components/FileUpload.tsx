@@ -87,9 +87,9 @@ export const FileUpload: React.FC<FileUploadProps> = ({ onFileUploadSuccess, onF
     }
   }, [processFile, resetState]);
 
-  // 時刻を結合してstartTime文字列を生成
+  // 時刻を結合してstartTime文字列を生成（サーバー側のフォーマット: YYYY-MM-DD HH:MM:SS）
   const getStartTimeString = () => {
-    return `${startDate}T${startHour}:${startMinute}:${startSecond}`;
+    return `${startDate} ${startHour}:${startMinute}:${startSecond}`;
   };
 
   const handleSubmit = () => {

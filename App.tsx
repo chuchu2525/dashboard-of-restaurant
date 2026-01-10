@@ -3,6 +3,9 @@ import { FileUpload } from './components/FileUpload';
 import { Dashboard } from './components/Dashboard';
 import { RestaurantData, ProcessedFrame, SummaryMetrics, ArrivalTrendDataPoint, AggregatedTimeSeries, SeatUsageBlock, TableOccupancyOverTimeDataPoint } from './types';
 
+// API URL設定
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+
 const App: React.FC = () => {
   const [processedFrames, setProcessedFrames] = useState<ProcessedFrame[]>([]);
   const [summaryMetrics, setSummaryMetrics] = useState<SummaryMetrics | null>(null);
@@ -16,55 +19,147 @@ const App: React.FC = () => {
   const [hasData, setHasData] = useState<boolean>(false);
   const [originalJson, setOriginalJson] = useState<string>('');
   const [startTimeFilter, setStartTimeFilter] = useState<string>('');
+  const [uploadProgress, setUploadProgress] = useState<number>(0);
 
 
-  const processDataWithWorker = useCallback((jsonString: string, startTime: string | null) => {
+  const processDataWithAPI = useCallback(async (jsonString: string, name: string, startTime: string) => {
     if (!jsonString) return;
 
     setIsLoading(true);
     setError(null);
     setHasData(false);
+    setUploadProgress(0);
 
-    const worker = new Worker(new URL('./data.worker.ts', import.meta.url), {
-      type: 'module',
-    });
+    try {
+      // JSONデータをパース
+      const jsonData = JSON.parse(jsonString);
+      const frameKeys = Object.keys(jsonData);
+      const totalFrames = frameKeys.length;
 
-    worker.onmessage = (e) => {
-      const { type, data, error: workerError } = e.data;
-      if (type === 'success') {
-        setProcessedFrames(data.processedFrames);
-        setSummaryMetrics(data.summaryMetrics);
-        setArrivalTrend(data.arrivalTrendData);
-        setAggregatedTimeSeries(data.aggregatedTimeSeries);
-        setSeatUsageTimeline(data.seatUsageTimeline);
-        setInterpolatedOccupancyData(data.interpolatedOccupancyData);
-        setHasData(true);
-      } else {
-        console.error("Error from worker:", workerError);
-        setError(workerError || "Failed to process data in worker.");
-        setHasData(false);
+      // チャンクサイズを決定（10,000フレーム = 約10-15MB）
+      const CHUNK_SIZE = 10000;
+      const totalChunks = Math.ceil(totalFrames / CHUNK_SIZE);
+
+      console.log(`Starting chunked upload: ${totalFrames} frames in ${totalChunks} chunks`);
+
+      // 1. セッション初期化
+      const initResponse = await fetch(`${API_URL}/api/videos/upload/init`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          filename: name,
+          recordingStartTime: startTime || '2025-06-30 10:00:00',
+          recordingEndTime: '2025-06-30 15:06:00',
+          videoFps: 30,
+          totalFrames,
+          totalChunks,
+        }),
+      });
+
+      if (!initResponse.ok) {
+        const errorData = await initResponse.json();
+        throw new Error(errorData.details || 'Init failed');
       }
-      setIsLoading(false);
-      worker.terminate();
-    };
 
-    worker.onerror = (e) => {
-      console.error("Worker error:", e);
-      setError("An unexpected error occurred in the data processing worker.");
+      const { videoId } = await initResponse.json();
+      console.log('Upload session initialized:', videoId);
+
+      // 2. 各チャンクをアップロード
+      for (let i = 0; i < totalChunks; i++) {
+        const startIdx = i * CHUNK_SIZE;
+        const endIdx = Math.min((i + 1) * CHUNK_SIZE, totalFrames);
+        const chunkKeys = frameKeys.slice(startIdx, endIdx);
+
+        // このチャンクのフレームデータを抽出
+        const chunkData: Record<string, any> = {};
+        chunkKeys.forEach(key => {
+          chunkData[key] = jsonData[key];
+        });
+
+        console.log(`Uploading chunk ${i + 1}/${totalChunks} (${chunkKeys.length} frames)...`);
+
+        const chunkResponse = await fetch(`${API_URL}/api/videos/upload/chunk`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            videoId,
+            chunkIndex: i,
+            totalChunks,
+            jsonData: chunkData,
+            isLastChunk: i === totalChunks - 1,
+          }),
+        });
+
+        if (!chunkResponse.ok) {
+          const errorData = await chunkResponse.json();
+          throw new Error(`Chunk ${i + 1} upload failed: ${errorData.details || 'Unknown error'}`);
+        }
+
+        const chunkResult = await chunkResponse.json();
+        console.log(`Chunk ${i + 1}/${totalChunks} completed: ${chunkResult.processedFrames}/${chunkResult.totalFrames} frames processed`);
+
+        // 進捗を更新
+        const progress = Math.round(((i + 1) / totalChunks) * 100);
+        setUploadProgress(progress);
+      }
+
+      // 3. 完了確認
+      console.log('Verifying upload completion...');
+      const completeResponse = await fetch(`${API_URL}/api/videos/upload/complete`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ videoId }),
+      });
+
+      if (!completeResponse.ok) {
+        const errorData = await completeResponse.json();
+        throw new Error(errorData.details || 'Complete check failed');
+      }
+
+      const completeResult = await completeResponse.json();
+
+      if (!completeResult.isComplete) {
+        throw new Error(`Upload incomplete: ${completeResult.processedFrames}/${completeResult.totalFrames} frames`);
+      }
+
+      console.log('Video uploaded successfully:', videoId);
+
+      // 4. ダッシュボード用データを取得
+      const dataUrl = startTime
+        ? `${API_URL}/api/videos/${videoId}/data?startTime=${encodeURIComponent(startTime)}`
+        : `${API_URL}/api/videos/${videoId}/data`;
+
+      const dataResponse = await fetch(dataUrl);
+
+      if (!dataResponse.ok) {
+        throw new Error('Failed to fetch dashboard data');
+      }
+
+      const dashboardData = await dataResponse.json();
+
+      // 状態を更新
+      setProcessedFrames(dashboardData.processedFrames);
+      setSummaryMetrics(dashboardData.summaryMetrics);
+      setArrivalTrend(dashboardData.arrivalTrendData);
+      setAggregatedTimeSeries(dashboardData.aggregatedTimeSeries);
+      setSeatUsageTimeline(dashboardData.seatUsageTimeline);
+      setInterpolatedOccupancyData(dashboardData.interpolatedOccupancyData);
+      setHasData(true);
+    } catch (err: any) {
+      console.error('Error processing data:', err);
+      setError(err.message || 'Failed to process data');
       setHasData(false);
+    } finally {
       setIsLoading(false);
-      worker.terminate();
-    };
-    
-    worker.postMessage({ jsonString, startTime });
+    }
   }, []);
 
   const handleFileUpload = useCallback((jsonString: string, name: string, startTime: string) => {
     setOriginalJson(jsonString);
     setFileName(name);
     setStartTimeFilter(startTime);
-    processDataWithWorker(jsonString, startTime || null);
-  }, [processDataWithWorker]);
+    processDataWithAPI(jsonString, name, startTime);
+  }, [processDataWithAPI]);
 
   const handleFileError = useCallback((errMsg: string) => {
     setError(errMsg);
@@ -86,6 +181,7 @@ const App: React.FC = () => {
     setHasData(false);
     setOriginalJson('');
     setStartTimeFilter('');
+    setUploadProgress(0);
   }, []);
 
   return (
@@ -102,9 +198,20 @@ const App: React.FC = () => {
           </div>
         )}
         {isLoading && (
-           <div className="flex justify-center items-center h-64">
+          <div className="flex flex-col justify-center items-center h-64">
             <div className="animate-spin rounded-full h-16 w-16 border-t-4 border-b-4 border-blue-500"></div>
-            <p className="ml-4 text-xl">Processing data...</p>
+            <p className="mt-4 text-xl">Processing data...</p>
+            {uploadProgress > 0 && (
+              <div className="mt-4 w-64">
+                <div className="bg-slate-700 rounded-full h-4">
+                  <div
+                    className="bg-blue-500 h-4 rounded-full transition-all duration-300"
+                    style={{ width: `${uploadProgress}%` }}
+                  ></div>
+                </div>
+                <p className="text-center mt-2 text-sm text-slate-400">{uploadProgress}% uploaded</p>
+              </div>
+            )}
           </div>
         )}
         {error && (
