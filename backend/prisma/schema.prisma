@@ -1,0 +1,53 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model Video {
+  id                 String    @id @default(uuid())
+  filename           String
+  recordingStartTime DateTime
+  recordingEndTime   DateTime?
+  videoFps           Float?
+  totalFrames        Int?
+  processedFrames    Int?
+  uploadedAt         DateTime  @default(now())
+  metadata           Json?
+  frames             Frame[]
+
+  @@index([recordingStartTime])
+}
+
+model Frame {
+  id            String      @id @default(uuid())
+  videoId       String
+  frameNumber   Int
+  realTimestamp DateTime
+  totalPersons  Int
+  occupiedSeats Int
+  detections    Detection[]
+  video         Video       @relation(fields: [videoId], references: [id], onDelete: Cascade)
+
+  @@unique([videoId, frameNumber])
+  @@index([realTimestamp])
+  @@index([videoId])
+}
+
+model Detection {
+  id         String  @id @default(uuid())
+  frameId    String
+  personId   String
+  bboxX1     Int
+  bboxY1     Int
+  bboxX2     Int
+  bboxY2     Int
+  seatId     String?
+  confidence Float
+  frame      Frame   @relation(fields: [frameId], references: [id], onDelete: Cascade)
+
+  @@index([personId])
+  @@index([frameId])
+}
