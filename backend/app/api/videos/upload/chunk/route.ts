@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { calculateRealTimestamp } from '@/lib/timeConverter';
+import { calculateLinearTimestamp, calculateRealTimestamp } from '@/lib/timeConverter';
 import { z } from 'zod';
 
 export const maxDuration = 300;
@@ -62,10 +62,18 @@ export async function POST(request: NextRequest) {
     const frameDataWithDetections = [];
     const fps = video.videoFps || 30;
     const startTimestamp = video.recordingStartTime;
+    const endTimestamp = video.recordingEndTime;
+    const totalFrames = video.totalFrames || frameDataWithDetections.length;
+    const durationSeconds = endTimestamp
+      ? (endTimestamp.getTime() - startTimestamp.getTime()) / 1000
+      : null;
 
     for (const [frameKey, detections] of Object.entries(jsonData)) {
       const frameNumber = parseInt(frameKey.replace('frame_', ''));
-      const realTimestamp = calculateRealTimestamp(startTimestamp, frameNumber, fps);
+      const frameIndex = Math.max(frameNumber - 1, 0);
+      const realTimestamp = durationSeconds
+        ? calculateLinearTimestamp(startTimestamp, durationSeconds, frameIndex, totalFrames)
+        : calculateRealTimestamp(startTimestamp, frameNumber, fps);
 
       const uniqueSeats = new Set(
         (detections as any[])

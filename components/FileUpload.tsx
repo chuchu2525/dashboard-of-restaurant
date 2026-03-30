@@ -2,7 +2,7 @@ import React, { useCallback, useState } from 'react';
 import { RestaurantData } from '../types';
 
 interface FileUploadProps {
-  onFileUploadSuccess: (jsonString: string, fileName: string, startTime: string) => void;
+  onFileUploadSuccess: (jsonString: string, fileName: string, startTime: string, durationHms: string) => void;
   onFileUploadError: (error: string) => void;
 }
 
@@ -17,6 +17,7 @@ export const FileUpload: React.FC<FileUploadProps> = ({ onFileUploadSuccess, onF
   const [startHour, setStartHour] = useState<string>(now.getHours().toString().padStart(2, '0'));
   const [startMinute, setStartMinute] = useState<string>(now.getMinutes().toString().padStart(2, '0'));
   const [startSecond, setStartSecond] = useState<string>('00');
+  const [durationHms, setDurationHms] = useState<string>('');
 
   const resetState = useCallback(() => {
     setSelectedFile(null);
@@ -92,10 +93,23 @@ export const FileUpload: React.FC<FileUploadProps> = ({ onFileUploadSuccess, onF
     return `${startDate} ${startHour}:${startMinute}:${startSecond}`;
   };
 
+  const isValidDurationHms = (value: string) => {
+    if (!/^\d{1,2}:\d{2}:\d{2}$/.test(value)) return false;
+    const [h, m, s] = value.split(':').map(Number);
+    if (Number.isNaN(h) || Number.isNaN(m) || Number.isNaN(s)) return false;
+    if (m < 0 || m > 59 || s < 0 || s > 59) return false;
+    if (h === 0 && m === 0 && s === 0) return false;
+    return true;
+  };
+
   const handleSubmit = () => {
     if (selectedFile && fileContent) {
       const startTimeString = getStartTimeString();
-      onFileUploadSuccess(fileContent, selectedFile.name, startTimeString);
+      if (!isValidDurationHms(durationHms)) {
+        onFileUploadError('Please enter a valid duration in HH:MM:SS (non-zero).');
+        return;
+      }
+      onFileUploadSuccess(fileContent, selectedFile.name, startTimeString, durationHms);
     } else {
       onFileUploadError('Please select a file first.');
     }
@@ -182,6 +196,23 @@ export const FileUpload: React.FC<FileUploadProps> = ({ onFileUploadSuccess, onF
         <div className="mt-2 text-xs text-slate-400 text-center">
           Current setting: {getStartTimeString().replace('T', ' ')}
         </div>
+      </div>
+
+      <div className="w-full max-w-lg my-6">
+        <label htmlFor="duration-hms" className="block text-sm font-medium text-slate-300 mb-2 text-center">
+          Video Duration (HH:MM:SS)
+        </label>
+        <input
+          id="duration-hms"
+          type="text"
+          placeholder="05:06:00"
+          value={durationHms}
+          onChange={(e) => setDurationHms(e.target.value)}
+          className="bg-slate-900 text-white border border-slate-600 rounded-md px-3 py-2 text-sm focus:ring-sky-500 focus:border-sky-500 w-full shadow-inner text-center"
+        />
+        <p className="mt-2 text-xs text-slate-400 text-center">
+          Required. Example: 05:06:00
+        </p>
       </div>
 
       <button

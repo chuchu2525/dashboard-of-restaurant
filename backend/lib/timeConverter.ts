@@ -15,6 +15,25 @@ export function calculateRealTimestamp(
 }
 
 /**
+ * フレーム番号を動画尺に均等配分して実時刻を計算
+ * @param recordingStartTime 撮影開始時刻
+ * @param durationSeconds 動画尺（秒）
+ * @param frameIndex 0始まりのフレームindex
+ * @param totalFrames 総フレーム数
+ */
+export function calculateLinearTimestamp(
+  recordingStartTime: Date,
+  durationSeconds: number,
+  frameIndex: number,
+  totalFrames: number
+): Date {
+  const denominator = Math.max(totalFrames - 1, 1);
+  const ratio = frameIndex / denominator;
+  const timestamp = new Date(recordingStartTime.getTime() + ratio * durationSeconds * 1000);
+  return timestamp;
+}
+
+/**
  * JSONデータからFPSを推定
  * 例: 2025/06/30 10:00:00 ～ 15:06:00 (約5時間) のデータから逆算
  * @param jsonData フレームデータ
@@ -52,3 +71,10 @@ export function parseTimestamp(timestampStr: string): Date {
   return new Date(year, month - 1, day, hour, minute, second);
 }
 
+/**
+ * "HH:MM:SS" を秒に変換
+ */
+export function parseDurationHms(durationStr: string): number {
+  const [h, m, s] = durationStr.split(':').map(Number);
+  return h * 3600 + m * 60 + s;
+}

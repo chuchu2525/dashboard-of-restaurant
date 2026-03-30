@@ -51,9 +51,9 @@ todos:
 - `docker-compose.yml`（Postgres）
 - `.env.example`（DB接続）
 - フロント
-- [` ``/Users/yuukun/.cursor/worktrees/dashboard-feature/oet/components/FileUpload.tsx`` `](/Users/yuukun/.cursor/worktrees/dashboard-feature/oet/components/FileUpload.tsx)（ファイルをAPIへ送る）
-- [` ``/Users/yuukun/.cursor/worktrees/dashboard-feature/oet/App.tsx`` `](/Users/yuukun/.cursor/worktrees/dashboard-feature/oet/App.tsx)（worker処理をAPIレスポンスに差し替え）
-- [` ``/Users/yuukun/.cursor/worktrees/dashboard-feature/oet/types.ts`` `](/Users/yuukun/.cursor/worktrees/dashboard-feature/oet/types.ts)（APIレスポンス型を共有）
+- [` ```/Users/yuukun/.cursor/worktrees/dashboard-feature/oet/components/FileUpload.tsx``` `](/Users/yuukun/.cursor/worktrees/dashboard-feature/oet/components/FileUpload.tsx)（ファイルをAPIへ送る）
+- [` ```/Users/yuukun/.cursor/worktrees/dashboard-feature/oet/App.tsx``` `](/Users/yuukun/.cursor/worktrees/dashboard-feature/oet/App.tsx)（worker処理をAPIレスポンスに差し替え）
+- [` ```/Users/yuukun/.cursor/worktrees/dashboard-feature/oet/types.ts``` `](/Users/yuukun/.cursor/worktrees/dashboard-feature/oet/types.ts)（APIレスポンス型を共有）
 
 ## DBスキーマ（最小）
 
@@ -96,7 +96,7 @@ flowchart TD
     - arrival trend（hourly bucketで newVisitors/newGroups）
     - peak occupancy
     - seat usage timeline（状態遷移・absence閾値）
-- 現状の集計ロジックは [` ``/Users/yuukun/.cursor/worktrees/dashboard-feature/oet/data.worker.ts`` `](/Users/yuukun/.cursor/worktrees/dashboard-feature/oet/data.worker.ts) にあるので、まずは**同じ出力**をサーバ側で生成する
+- 現状の集計ロジックは [` ```/Users/yuukun/.cursor/worktrees/dashboard-feature/oet/data.worker.ts``` `](/Users/yuukun/.cursor/worktrees/dashboard-feature/oet/data.worker.ts) にあるので、まずは**同じ出力**をサーバ側で生成する
 
 ## フロント差し替え方針
 
@@ -116,4 +116,3 @@ flowchart TD
 
 - `setup-postgres`: Postgresをdocker-composeで追加し、接続設定を用意
 - `add-api-server`: Fastifyサーバを追加し、`POST /datasets` と `GET /datasets/:id/dashboard` を実装
-- `stream-aggregate`: ストリーミングJSONパースで `data.worker.ts` 相当の集計をサーバで生成

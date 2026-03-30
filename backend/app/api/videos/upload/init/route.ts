@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { parseTimestamp } from '@/lib/timeConverter';
+import { parseDurationHms, parseTimestamp } from '@/lib/timeConverter';
 import { z } from 'zod';
 
 export const maxDuration = 60;
@@ -9,7 +9,7 @@ export const dynamic = 'force-dynamic';
 const initSchema = z.object({
   filename: z.string().min(1).max(255),
   recordingStartTime: z.string().regex(/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/),
-  recordingEndTime: z.string().regex(/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/).optional(),
+  recordingDuration: z.string().regex(/^\d{1,2}:\d{2}:\d{2}$/),
   videoFps: z.number().positive().optional(),
   totalFrames: z.number().int().positive(),
   totalChunks: z.number().int().positive(),
@@ -32,7 +32,14 @@ export async function POST(request: NextRequest) {
     const validated = initSchema.parse(body);
 
     const startTime = parseTimestamp(validated.recordingStartTime);
-    const endTime = validated.recordingEndTime ? parseTimestamp(validated.recordingEndTime) : null;
+    const durationSeconds = parseDurationHms(validated.recordingDuration);
+    if (durationSeconds <= 0) {
+      return NextResponse.json(
+        { error: 'Init failed', details: 'recordingDuration must be greater than 00:00:00' },
+        { status: 400 }
+      );
+    }
+    const endTime = new Date(startTime.getTime() + durationSeconds * 1000);
 
     // Videoレコードを作成（processedFrames = 0）
     const video = await prisma.video.create({

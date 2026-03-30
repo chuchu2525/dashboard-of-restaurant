@@ -17,6 +17,17 @@ interface DashboardProps {
 }
 
 const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884D8', '#82Ca9D', '#FF847C', '#E84A5F', '#2A363B'];
+const MAX_CHART_WIDTH = 6000;
+
+const calcMinWidth = (count: number, base = 900) => {
+  return Math.min(Math.max(base, count * 20), MAX_CHART_WIDTH);
+};
+
+const ScrollX: React.FC<{ minWidth?: number; children: React.ReactNode }> = ({ minWidth = 900, children }) => (
+  <div className="overflow-x-auto">
+    <div style={{ minWidth }}>{children}</div>
+  </div>
+);
 
 // Initialize AI Provider using the new system
 const { provider: ai, error: aiInitializationError } = createAIProvider();
@@ -374,18 +385,20 @@ Based on this data, here are your recommendations:
           </div>
           
           {arrivalTrendData.length > 0 ? (
-            <ResponsiveContainer width="100%" height={300}>
-              <LineChart data={arrivalTrendData}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#4A5568" />
-                <XAxis dataKey="time" stroke="#90CDF4" tick={{ fontSize: 12 }} />
-                <YAxis yAxisId="left" stroke="#38BDF8" allowDecimals={false} />
-                <YAxis yAxisId="right" orientation="right" stroke="#34D399" allowDecimals={false} />
-                <Tooltip content={<CustomTooltip />} />
-                <Legend wrapperStyle={{color: "#E2E8F0"}}/>
-                <Line yAxisId="left" type="monotone" dataKey="newVisitors" name="New Visitors (per hour)" stroke="#38BDF8" strokeWidth={2} />
-                <Line yAxisId="right" type="monotone" dataKey="newGroups" name="New Groups (per hour)" stroke="#34D399" strokeWidth={2} />
-              </LineChart>
-            </ResponsiveContainer>
+            <ScrollX minWidth={calcMinWidth(arrivalTrendData.length, 1000)}>
+              <ResponsiveContainer width="100%" height={300}>
+                <LineChart data={arrivalTrendData}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#4A5568" />
+                  <XAxis dataKey="time" stroke="#90CDF4" tick={{ fontSize: 12 }} />
+                  <YAxis yAxisId="left" stroke="#38BDF8" allowDecimals={false} />
+                  <YAxis yAxisId="right" orientation="right" stroke="#34D399" allowDecimals={false} />
+                  <Tooltip content={<CustomTooltip />} />
+                  <Legend wrapperStyle={{color: "#E2E8F0"}}/>
+                  <Line yAxisId="left" type="monotone" dataKey="newVisitors" name="New Visitors (per hour)" stroke="#38BDF8" strokeWidth={2} />
+                  <Line yAxisId="right" type="monotone" dataKey="newGroups" name="New Groups (per hour)" stroke="#34D399" strokeWidth={2} />
+                </LineChart>
+              </ResponsiveContainer>
+            </ScrollX>
           ) : (
             <p className="text-slate-400 text-center py-10">No arrival trend data available.</p>
           )}
@@ -413,16 +426,18 @@ Based on this data, here are your recommendations:
                 ))}
               </div>
             </div>
-            <ResponsiveContainer width="100%" height={300}>
-              <LineChart data={timeSeriesData}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#4A5568" />
-                <XAxis dataKey="time" stroke="#90CDF4" />
-                <YAxis stroke="#90CDF4" allowDecimals={false} />
-                <Tooltip content={<CustomTooltip />} />
-                <Legend wrapperStyle={{color: "#E2E8F0"}} />
-                <Line type="monotone" dataKey="totalPersons" name="Total Customers" stroke="#38BDF8" strokeWidth={2} dot={timeSeriesData.length < 100 ? { r: 4, fill: '#38BDF8' } : false} activeDot={{ r: 6 }} />
-              </LineChart>
-            </ResponsiveContainer>
+            <ScrollX minWidth={calcMinWidth(timeSeriesData.length, 1000)}>
+              <ResponsiveContainer width="100%" height={300}>
+                <LineChart data={timeSeriesData}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#4A5568" />
+                  <XAxis dataKey="time" stroke="#90CDF4" />
+                  <YAxis stroke="#90CDF4" allowDecimals={false} />
+                  <Tooltip content={<CustomTooltip />} />
+                  <Legend wrapperStyle={{color: "#E2E8F0"}} />
+                  <Line type="monotone" dataKey="totalPersons" name="Total Customers" stroke="#38BDF8" strokeWidth={2} dot={timeSeriesData.length < 100 ? { r: 4, fill: '#38BDF8' } : false} activeDot={{ r: 6 }} />
+                </LineChart>
+              </ResponsiveContainer>
+            </ScrollX>
           </div>
 
         </div>
@@ -431,16 +446,18 @@ Based on this data, here are your recommendations:
           <div className="bg-slate-800 p-6 rounded-xl shadow-2xl">
             <h3 className="text-xl font-semibold mb-4 text-sky-300">Group Size Distribution (Overall)</h3>
             {groupSizeDistributionData.length > 0 ? (
-            <ResponsiveContainer width="100%" height={300}>
-              <BarChart data={groupSizeDistributionData} layout="vertical">
-                <CartesianGrid strokeDasharray="3 3" stroke="#4A5568" />
-                <XAxis type="number" stroke="#90CDF4" allowDecimals={false} />
-                <YAxis type="category" dataKey="groupSize" stroke="#90CDF4" width={100} interval={0}/>
-                <Tooltip content={<CustomTooltip />} />
-                <Legend wrapperStyle={{color: "#E2E8F0"}}/>
-                <Bar dataKey="frequency" name="Number of Groups" fill="#A78BFA" radius={[0, 4, 4, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
+            <ScrollX minWidth={900}>
+              <ResponsiveContainer width="100%" height={300}>
+                <BarChart data={groupSizeDistributionData} layout="vertical">
+                  <CartesianGrid strokeDasharray="3 3" stroke="#4A5568" />
+                  <XAxis type="number" stroke="#90CDF4" allowDecimals={false} />
+                  <YAxis type="category" dataKey="groupSize" stroke="#90CDF4" width={100} interval={0}/>
+                  <Tooltip content={<CustomTooltip />} />
+                  <Legend wrapperStyle={{color: "#E2E8F0"}}/>
+                  <Bar dataKey="frequency" name="Number of Groups" fill="#A78BFA" radius={[0, 4, 4, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            </ScrollX>
             ) : (
                <p className="text-slate-400 text-center py-10">No group data available overall.</p>
             )}
@@ -450,27 +467,29 @@ Based on this data, here are your recommendations:
         <div className="bg-slate-800 p-6 rounded-xl shadow-2xl">
           <h3 className="text-xl font-semibold mb-4 text-sky-300">Table Occupancy Over Time</h3>
           {tableOccupancyOverTimeData.length > 0 && allSeatIds.length > 0 ? (
-            <ResponsiveContainer width="100%" height={400}>
-              <LineChart data={tableOccupancyOverTimeData}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#4A5568" />
-                <XAxis dataKey="time" stroke="#90CDF4" />
-                <YAxis stroke="#90CDF4" allowDecimals={false} />
-                <Tooltip content={<CustomTooltip />} />
-                <Legend wrapperStyle={{color: "#E2E8F0"}} />
-                {allSeatIds.map((seatId, index) => (
-                  <Line
-                    key={seatId}
-                    type="monotone"
-                    dataKey={seatId}
-                    name={seatId}
-                    stroke={COLORS[index % COLORS.length]}
-                    strokeWidth={2}
-                    dot={{ r: 2 }}
-                    activeDot={{ r: 5 }}
-                  />
-                ))}
-              </LineChart>
-            </ResponsiveContainer>
+            <ScrollX minWidth={calcMinWidth(tableOccupancyOverTimeData.length, 1200)}>
+              <ResponsiveContainer width="100%" height={400}>
+                <LineChart data={tableOccupancyOverTimeData}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#4A5568" />
+                  <XAxis dataKey="time" stroke="#90CDF4" />
+                  <YAxis stroke="#90CDF4" allowDecimals={false} />
+                  <Tooltip content={<CustomTooltip />} />
+                  <Legend wrapperStyle={{color: "#E2E8F0"}} />
+                  {allSeatIds.map((seatId, index) => (
+                    <Line
+                      key={seatId}
+                      type="monotone"
+                      dataKey={seatId}
+                      name={seatId}
+                      stroke={COLORS[index % COLORS.length]}
+                      strokeWidth={2}
+                      dot={{ r: 2 }}
+                      activeDot={{ r: 5 }}
+                    />
+                  ))}
+                </LineChart>
+              </ResponsiveContainer>
+            </ScrollX>
           ) : (
             <p className="text-slate-400 text-center py-10">No table occupancy data available to display trends.</p>
           )}
@@ -480,27 +499,29 @@ Based on this data, here are your recommendations:
           <h3 className="text-xl font-semibold mb-2 text-sky-300">Interpreted Table Occupancy (with absence tolerance)</h3>
           <p className="text-xs text-slate-400 mb-4 -mt-1">This chart shows continuous table usage, smoothing over short breaks (up to 5 mins) to reflect actual session durations.</p>
           {interpolatedOccupancyData.length > 0 && allSeatIds.length > 0 ? (
-            <ResponsiveContainer width="100%" height={400}>
-              <LineChart data={interpolatedOccupancyData}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#4A5568" />
-                <XAxis dataKey="time" stroke="#90CDF4" />
-                <YAxis stroke="#90CDF4" allowDecimals={false} />
-                <Tooltip content={<CustomTooltip />} />
-                <Legend wrapperStyle={{color: "#E2E8F0"}} />
-                {allSeatIds.map((seatId, index) => (
-                  <Line
-                    key={seatId}
-                    type="monotone"
-                    dataKey={seatId}
-                    name={seatId}
-                    stroke={COLORS[index % COLORS.length]}
-                    strokeWidth={2}
-                    dot={{ r: 2 }}
-                    activeDot={{ r: 5 }}
-                  />
-                ))}
-              </LineChart>
-            </ResponsiveContainer>
+            <ScrollX minWidth={calcMinWidth(interpolatedOccupancyData.length, 1200)}>
+              <ResponsiveContainer width="100%" height={400}>
+                <LineChart data={interpolatedOccupancyData}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#4A5568" />
+                  <XAxis dataKey="time" stroke="#90CDF4" />
+                  <YAxis stroke="#90CDF4" allowDecimals={false} />
+                  <Tooltip content={<CustomTooltip />} />
+                  <Legend wrapperStyle={{color: "#E2E8F0"}} />
+                  {allSeatIds.map((seatId, index) => (
+                    <Line
+                      key={seatId}
+                      type="monotone"
+                      dataKey={seatId}
+                      name={seatId}
+                      stroke={COLORS[index % COLORS.length]}
+                      strokeWidth={2}
+                      dot={{ r: 2 }}
+                      activeDot={{ r: 5 }}
+                    />
+                  ))}
+                </LineChart>
+              </ResponsiveContainer>
+            </ScrollX>
           ) : (
             <p className="text-slate-400 text-center py-10">No interpreted table occupancy data available.</p>
           )}
@@ -511,50 +532,52 @@ Based on this data, here are your recommendations:
           <h3 className="text-xl font-semibold mb-4 text-sky-300">Seat Usage Timeline (Gantt View)</h3>
           {ganttChartData.length > 0 ? (
             <>
-              <ResponsiveContainer width="100%" height={ganttChartData.length * 60 + 50}>
-                <BarChart
-                  data={ganttChartData}
-                  layout="vertical"
-                  margin={{ top: 5, right: 30, left: 100, bottom: 5 }}
-                  barCategoryGap="30%"
-                >
-                  <CartesianGrid strokeDasharray="3 3" stroke="#4A5568" />
-                  <XAxis 
-                    type="number" 
-                    stroke="#90CDF4" 
-                    domain={[0, 'dataMax']}
-                    label={{ value: 'Duration (minutes)', position: 'bottom', fill: '#90CDF4', dy: 10 }}
-                  />
-                  <YAxis 
-                    type="category" 
-                    dataKey="seatId" 
-                    stroke="#90CDF4" 
-                    width={80}
-                    tickFormatter={(value) => value.charAt(0).toUpperCase() + value.slice(1)}
-                  />
-                  <Tooltip content={<GanttTooltip />} cursor={{ fill: 'rgba(100, 116, 139, 0.2)' }}/>
-                  
-                  {Array.from({ length: maxBlocks }).map((_, i) => (
-                    <Bar 
-                      key={i}
-                      dataKey={`block_${i}_duration`} 
-                      stackId="a" 
-                      name={`Visit ${i+1}`}
-                      isAnimationActive={false}
-                    >
-                      {ganttChartData.map((entry, cellIndex) => {
-                        const block = entry[`block_${i}_details`];
-                        return (
-                          <Cell 
-                            key={`cell-${cellIndex}`} 
-                            fill={block ? getGroupColor(block.personCount) : 'transparent'} 
-                          />
-                        );
-                      })}
-                    </Bar>
-                  ))}
-                </BarChart>
-              </ResponsiveContainer>
+              <ScrollX minWidth={1100}>
+                <ResponsiveContainer width="100%" height={ganttChartData.length * 60 + 50}>
+                  <BarChart
+                    data={ganttChartData}
+                    layout="vertical"
+                    margin={{ top: 5, right: 30, left: 100, bottom: 5 }}
+                    barCategoryGap="30%"
+                  >
+                    <CartesianGrid strokeDasharray="3 3" stroke="#4A5568" />
+                    <XAxis 
+                      type="number" 
+                      stroke="#90CDF4" 
+                      domain={[0, 'dataMax']}
+                      label={{ value: 'Duration (minutes)', position: 'bottom', fill: '#90CDF4', dy: 10 }}
+                    />
+                    <YAxis 
+                      type="category" 
+                      dataKey="seatId" 
+                      stroke="#90CDF4" 
+                      width={80}
+                      tickFormatter={(value) => value.charAt(0).toUpperCase() + value.slice(1)}
+                    />
+                    <Tooltip content={<GanttTooltip />} cursor={{ fill: 'rgba(100, 116, 139, 0.2)' }}/>
+                    
+                    {Array.from({ length: maxBlocks }).map((_, i) => (
+                      <Bar 
+                        key={i}
+                        dataKey={`block_${i}_duration`} 
+                        stackId="a" 
+                        name={`Visit ${i+1}`}
+                        isAnimationActive={false}
+                      >
+                        {ganttChartData.map((entry, cellIndex) => {
+                          const block = entry[`block_${i}_details`];
+                          return (
+                            <Cell 
+                              key={`cell-${cellIndex}`} 
+                              fill={block ? getGroupColor(block.personCount) : 'transparent'} 
+                            />
+                          );
+                        })}
+                      </Bar>
+                    ))}
+                  </BarChart>
+                </ResponsiveContainer>
+              </ScrollX>
               <CustomGanttLegend />
             </>
           ) : (
@@ -620,42 +643,46 @@ Based on this data, here are your recommendations:
 
         <div className="bg-slate-800 p-6 rounded-xl shadow-2xl">
           <h3 className="text-xl font-semibold mb-4 text-sky-300">Seat Occupancy (Latest Frame at {latestFrame.time})</h3>
-          <ResponsiveContainer width="100%" height={300}>
-            <BarChart data={seatOccupancyData}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#4A5568" />
-              <XAxis dataKey="seatId" stroke="#90CDF4" />
-              <YAxis stroke="#90CDF4" allowDecimals={false} />
-              <Tooltip content={<CustomTooltip />} />
-              <Legend wrapperStyle={{color: "#E2E8F0"}}/>
-              <Bar dataKey="persons" name="Customers" fill="#34D399" radius={[4, 4, 0, 0]} />
-            </BarChart>
-          </ResponsiveContainer>
+          <ScrollX minWidth={900}>
+            <ResponsiveContainer width="100%" height={300}>
+              <BarChart data={seatOccupancyData}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#4A5568" />
+                <XAxis dataKey="seatId" stroke="#90CDF4" />
+                <YAxis stroke="#90CDF4" allowDecimals={false} />
+                <Tooltip content={<CustomTooltip />} />
+                <Legend wrapperStyle={{color: "#E2E8F0"}}/>
+                <Bar dataKey="persons" name="Customers" fill="#34D399" radius={[4, 4, 0, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          </ScrollX>
         </div>
 
         <div className="bg-slate-800 p-6 rounded-xl shadow-2xl">
             <h3 className="text-xl font-semibold mb-4 text-sky-300">Group Size Distribution (Latest Frame at {latestFrame.time})</h3>
             {latestFrameGroupSizeDistribution.length > 0 ? (
-            <ResponsiveContainer width="100%" height={300}>
-                <PieChart>
-                <Pie
-                    data={latestFrameGroupSizeDistribution}
-                    cx="50%"
-                    cy="50%"
-                    labelLine={false}
-                    label={({ name, percent, groupSize }) => `${groupSize}: ${(percent * 100).toFixed(0)}%`}
-                    outerRadius={100}
-                    fill="#8884d8"
-                    dataKey="frequency"
-                    nameKey="groupSize"
-                >
-                    {latestFrameGroupSizeDistribution.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                    ))}
-                </Pie>
-                <Tooltip content={<CustomTooltip />} />
-                <Legend wrapperStyle={{color: "#E2E8F0"}}/>
-                </PieChart>
-            </ResponsiveContainer>
+            <ScrollX minWidth={900}>
+              <ResponsiveContainer width="100%" height={300}>
+                  <PieChart>
+                  <Pie
+                      data={latestFrameGroupSizeDistribution}
+                      cx="50%"
+                      cy="50%"
+                      labelLine={false}
+                      label={({ name, percent, groupSize }) => `${groupSize}: ${(percent * 100).toFixed(0)}%`}
+                      outerRadius={100}
+                      fill="#8884d8"
+                      dataKey="frequency"
+                      nameKey="groupSize"
+                  >
+                      {latestFrameGroupSizeDistribution.map((entry, index) => (
+                      <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                      ))}
+                  </Pie>
+                  <Tooltip content={<CustomTooltip />} />
+                  <Legend wrapperStyle={{color: "#E2E8F0"}}/>
+                  </PieChart>
+              </ResponsiveContainer>
+            </ScrollX>
             ) : (
                 <p className="text-slate-400 text-center py-10">No group data for the latest frame.</p>
             )}

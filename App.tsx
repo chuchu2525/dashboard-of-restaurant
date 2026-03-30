@@ -22,7 +22,7 @@ const App: React.FC = () => {
   const [uploadProgress, setUploadProgress] = useState<number>(0);
 
 
-  const processDataWithAPI = useCallback(async (jsonString: string, name: string, startTime: string) => {
+  const processDataWithAPI = useCallback(async (jsonString: string, name: string, startTime: string, durationHms: string) => {
     if (!jsonString) return;
 
     setIsLoading(true);
@@ -49,7 +49,7 @@ const App: React.FC = () => {
         body: JSON.stringify({
           filename: name,
           recordingStartTime: startTime || '2025-06-30 10:00:00',
-          recordingEndTime: '2025-06-30 15:06:00',
+          recordingDuration: durationHms,
           videoFps: 30,
           totalFrames,
           totalChunks,
@@ -154,11 +154,11 @@ const App: React.FC = () => {
     }
   }, []);
 
-  const handleFileUpload = useCallback((jsonString: string, name: string, startTime: string) => {
+  const handleFileUpload = useCallback((jsonString: string, name: string, startTime: string, durationHms: string) => {
     setOriginalJson(jsonString);
     setFileName(name);
     setStartTimeFilter(startTime);
-    processDataWithAPI(jsonString, name, startTime);
+    processDataWithAPI(jsonString, name, startTime, durationHms);
   }, [processDataWithAPI]);
 
   const handleFileError = useCallback((errMsg: string) => {
